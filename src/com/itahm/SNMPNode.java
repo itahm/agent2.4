@@ -2,20 +2,23 @@ package com.itahm;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.UnknownHostException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
+import org.snmp4j.PDU;
+import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.Variable;
+import org.snmp4j.smi.VariableBinding;
 
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 import com.itahm.json.RollingFile;
 import com.itahm.snmp.Node;
+import com.itahm.snmp.RequestOID;
 import com.itahm.util.TopTable;
 import com.itahm.util.Util;
 
@@ -47,44 +50,25 @@ public class SNMPNode extends Node {
 	
 	private File nodeRoot;
 	private final Map<Rolling, HashMap<String, RollingFile>> rollingMap = new HashMap<Rolling, HashMap<String, RollingFile>>();
-	private String ip;
-	private JSONObject ifSpeed;
-	private SNMPAgent agent;
-	private Critical critical;
+	private final String ip;
+	private final SNMPAgent agent;
+	private final Critical critical;
+	private JSONObject ifSpeed = new JSONObject();
+	private int rollingInterval = 1; // 단위: 분 (s, ms 아님!)
 	
-	public static SNMPNode	getInstance(SNMPAgent agent, String ip, int udp, String user, int level, JSONObject criticalCondition, JSONObject ifSpeed) throws IOException {
-		SNMPNode node = new SNMPNode(agent, ip, udp, user, level, criticalCondition);
+	public SNMPNode(SNMPAgent agent, String ip, int udp, int version, String name, int level) throws IOException {
+		super(agent, ip, udp);
 		
-		node.initialize(agent, ip, criticalCondition, ifSpeed);
+		if (version == SnmpConstants.version3) {
+			super.setUser(new OctetString(name), level);
+		}
+		else {
+			super.setCommunity(new OctetString(name), version);
+		}
 		
-		return node;
-	}
-	
-	public static SNMPNode getInstance(SNMPAgent agent, String ip, int udp, int version, String community, JSONObject criticalCondition, JSONObject ifSpeed) throws IOException {
-		SNMPNode node = new SNMPNode(agent, ip, udp, version, community, criticalCondition);
-		
-		node.initialize(agent, ip, criticalCondition, ifSpeed);
-		
-		return node;
-	}
-	
-	private SNMPNode(SNMPAgent agent, String ip, int udp, int version, String community, JSONObject criticalCondition) throws IOException {
-		super(agent, ip, udp, version, new OctetString(community));
-		
-		agent.setRequestOID(super.pdu);
-	}
-	
-	private SNMPNode(SNMPAgent agent, String ip, int udp, String user, int level, JSONObject criticalCondition) throws IOException {
-		super(agent, ip, udp, new OctetString(user), level);
-		
-		agent.setRequestOID(super.pdu);
-	}
-	
-	private void initialize(SNMPAgent agent, String ip, JSONObject critical, JSONObject ifSpeed) throws UnknownHostException {
 		this.agent = agent;
 		this.ip = ip;
-		
-		this.nodeRoot = new File(agent.nodeRoot, ip);
+		this.nodeRoot = new File(agent.nodeRoot, this.ip);
 		this.nodeRoot.mkdirs();
 		
 		for (Rolling database : Rolling.values()) {
@@ -93,13 +77,25 @@ public class SNMPNode extends Node {
 			new File(nodeRoot, database.toString()).mkdir();
 		}
 		
-		this.critical = new Critical(critical) {
+		this.critical = new Critical() {
 			@Override
 			public void onCritical(boolean isCritical, String resource, String index, long rate, String description) {
 				agent.onCritical(ip, resource, index, isCritical, rate, description);
 			}};
 		
-		setInterface(ifSpeed);
+		setRequestOID(super.pdu);
+	}
+	
+	public void setCritical(JSONObject critical) {
+		this.critical.set(critical);
+	}
+	
+	public void setInterface(JSONObject ifSpeed) {
+		this.ifSpeed = ifSpeed;
+	}
+	
+	public void setRollingInterval(int interval) {
+		this.rollingInterval = interval;
 	}
 	
 	private void putData(Rolling database, String index, long value) throws IOException {
@@ -110,7 +106,7 @@ public class SNMPNode extends Node {
 			rollingMap.put(index, rollingFile = new RollingFile(new File(this.nodeRoot, database.toString()), index));
 		}
 		
-		rollingFile.roll(value, Agent.getRollingInterval());
+		rollingFile.roll(value, this.rollingInterval);
 	}
 	
 	private void parseResponseTime() throws IOException {
@@ -142,20 +138,33 @@ public class SNMPNode extends Node {
 		}
 	}
 	
+	private void parseStorageEntry(Set<String> set) {
+		if (super.data.has("hrStorageEntry")) {
+			for (Object index : super.data.getJSONObject("hrStorageEntry").keySet()) {
+				set.add((String)index);
+			}
+		}
+	}
+	
 	private void parseStorage() throws IOException {
 		JSONObject storage;
-		@SuppressWarnings("unchecked")
-		Set<String> entry = super.data.has("hrStorageEntry")? new TreeSet<>(super.data.getJSONObject("hrStorageEntry").keySet()): null;
-		TopTable.Value max = null, maxRate = null;
-		long value, capacity, tmpValue;
+		TopTable.Value
+			max = null,
+			maxRate = null;
+		long value,
+			capacity,
+			tmpValue;
 		int type;
+		Set<String> entry = new HashSet<>();
+		
+		parseStorageEntry(entry);
 		
 		for(String index: super.hrStorageEntry.keySet()) {
-			if (entry != null && entry.contains(index)) {
+			if (entry.contains(index)) {
 				entry.remove(index);
 			}
 			else {
-				// 추가됨
+				// 추가된 index
 			}
 			
 			storage = super.hrStorageEntry.get(index);
@@ -204,7 +213,7 @@ public class SNMPNode extends Node {
 			}
 		}
 		
-		for (String index : entry) {
+		for (String index : entry) { // TODO 삭제된 index
 			System.out.println(index);
 		}
 		
@@ -449,17 +458,36 @@ public class SNMPNode extends Node {
 		return null;
 	}
 	
-	public void setCritical(JSONObject critical) {
-		if (critical == null) {
-			this.critical.clear();
-		}
-		else {
-			this.critical.reset(critical);
-		}
-	}
-	
-	public void setInterface(JSONObject ifSpeed) {
-		this.ifSpeed = ifSpeed;
+	public static PDU setRequestOID(PDU pdu) {
+		pdu.add(new VariableBinding(RequestOID.sysDescr));
+		pdu.add(new VariableBinding(RequestOID.sysObjectID));
+		pdu.add(new VariableBinding(RequestOID.sysName));
+		pdu.add(new VariableBinding(RequestOID.sysServices));
+		pdu.add(new VariableBinding(RequestOID.ifDescr));
+		pdu.add(new VariableBinding(RequestOID.ifType));
+		pdu.add(new VariableBinding(RequestOID.ifSpeed));
+		pdu.add(new VariableBinding(RequestOID.ifPhysAddress));
+		pdu.add(new VariableBinding(RequestOID.ifAdminStatus));
+		pdu.add(new VariableBinding(RequestOID.ifOperStatus));
+		pdu.add(new VariableBinding(RequestOID.ifName));
+		pdu.add(new VariableBinding(RequestOID.ifInOctets));
+		pdu.add(new VariableBinding(RequestOID.ifInErrors));
+		pdu.add(new VariableBinding(RequestOID.ifOutOctets));
+		pdu.add(new VariableBinding(RequestOID.ifOutErrors));
+		pdu.add(new VariableBinding(RequestOID.ifHCInOctets));
+		pdu.add(new VariableBinding(RequestOID.ifHCOutOctets));
+		pdu.add(new VariableBinding(RequestOID.ifHighSpeed));
+		pdu.add(new VariableBinding(RequestOID.ifAlias));
+		pdu.add(new VariableBinding(RequestOID.hrSystemUptime));
+		pdu.add(new VariableBinding(RequestOID.hrProcessorLoad));
+		pdu.add(new VariableBinding(RequestOID.hrSWRunName));
+		pdu.add(new VariableBinding(RequestOID.hrStorageType));
+		pdu.add(new VariableBinding(RequestOID.hrStorageDescr));
+		pdu.add(new VariableBinding(RequestOID.hrStorageAllocationUnits));
+		pdu.add(new VariableBinding(RequestOID.hrStorageSize));
+		pdu.add(new VariableBinding(RequestOID.hrStorageUsed));
+		
+		return pdu;
 	}
 	
 	@Override

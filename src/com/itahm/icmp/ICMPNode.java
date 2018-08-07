@@ -12,7 +12,10 @@ public class ICMPNode implements Runnable, Closeable {
 	private final ICMPListener listener;
 	private final InetAddress target;
 	private final Thread thread;
-	private final BlockingQueue<Long> bq = new LinkedBlockingQueue<>();
+	private final BlockingQueue<Long> queue = new LinkedBlockingQueue<>();
+	
+	private int timeout = 10000,
+		retry = 1;
 	
 	public final String ip;
 	
@@ -32,12 +35,11 @@ public class ICMPNode implements Runnable, Closeable {
 	@Override
 	public void run() {
 		long delay, sent;
-		int timeout, retry;
 		
 		init: while (!this.thread.isInterrupted()) {
 			try {
 				try {
-					delay = this.bq.take();
+					delay = this.queue.take();
 					
 					if (delay > 0) {
 						Thread.sleep(delay);
@@ -47,15 +49,13 @@ public class ICMPNode implements Runnable, Closeable {
 					}
 					
 					sent = System.currentTimeMillis();
-					timeout = this.listener.getTimeout();
-					retry = this.listener.getRetry();
 					
-					for (int i=0; i<retry; i++) {
+					for (int i=0; i<this.retry; i++) {
 						if (this.thread.isInterrupted()) {
 							throw new InterruptedException();
 						}
 						
-						if (this.target.isReachable(timeout)) {
+						if (this.target.isReachable(this.timeout)) {
 							this.listener.onSuccess(this, System.currentTimeMillis() - sent);
 							
 							continue init;
@@ -72,21 +72,16 @@ public class ICMPNode implements Runnable, Closeable {
 			}
 		}
 	}
+
+	public void setHealth(int timeout, int retry) {
+		this.timeout = timeout;
+		this.retry = retry;
+	}
 	
 	public void ping(long delay) {
 		try {
-			this.bq.put(delay);
+			this.queue.put(delay);
 		} catch (InterruptedException e) {
-		}
-	}
-
-	public void _close(boolean gracefully) throws IOException {
-		close();
-		
-		if (gracefully) {
-			try {
-				this.thread.join();
-			} catch (InterruptedException e) {}
 		}
 	}
 	
@@ -95,7 +90,7 @@ public class ICMPNode implements Runnable, Closeable {
 		this.thread.interrupt();
 		
 		try {
-			this.bq.put(-1L);
+			this.queue.put(-1L);
 		} catch (InterruptedException ie) {}
 	}
 	

@@ -24,11 +24,11 @@ import org.snmp4j.Target;
 import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.SnmpConstants;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.Counter32;
 import org.snmp4j.smi.Counter64;
 import org.snmp4j.smi.Gauge32;
 import org.snmp4j.smi.Integer32;
-//import org.snmp4j.smi.IpAddress;
 import org.snmp4j.smi.Null;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
@@ -51,12 +51,16 @@ public abstract class Node implements Runnable, Closeable {
 	private PDU nextPDU;
 	private final Snmp snmp;
 	private final InetAddress ip;
+	private final Address address;
 	private final Thread thread;
 	private Target target;
+	private int
+		timeout = TIMEOUT_DEF,
+		retry = 1;
 	private Integer enterprise;
 	private long failureCount = 0;
 	private boolean isInitialized = false;
-	private final BlockingQueue<PDU> bq = new LinkedBlockingQueue<>();
+	private final BlockingQueue<PDU> queue = new LinkedBlockingQueue<>();
 	
 	protected long lastResponse;
 	protected long responseTime;
@@ -73,26 +77,53 @@ public abstract class Node implements Runnable, Closeable {
 	protected final Map<String, JSONObject> ifEntry = new HashMap<>();
 	protected final Map<String, String> hrSWRunName = new HashMap<>();
 	
-	public Node(Snmp snmp, String ip) throws IOException {
+	public Node(Snmp snmp, String ip, int udp) throws IOException {
 		this.snmp = snmp;
 		this.ip = InetAddress.getByName(ip);
-		
+		this.address = new UdpAddress(this.ip, udp);
 		thread = new Thread(this);
 		
 		thread.setName("ITAhM SNMP Node "+ ip);
 		thread.start();
 	}
 	
-	public void close(boolean gracefully) throws IOException {
-		close();
+	private void set(int version) {
+		this.pdu.setType(PDU.GETNEXT);
+		this.nextPDU.setType(PDU.GETNEXT);		
 		
-		if (gracefully) {
-			try {
-				this.thread.join();
-			} catch (InterruptedException ie) {
-				throw new IOException (ie);
-			}
-		}
+		this.target.setVersion(version);
+		
+		this.target.setTimeout(TIMEOUT_DEF);
+		this.target.setRetries(0);
+	}
+	
+	public void setUser(OctetString user, int level) {
+		this.pdu = new ScopedPDU();
+		
+		this.nextPDU = new ScopedPDU();
+		
+		this.target = new UserTarget();
+		
+		this.target.setAddress(this.address);
+		this.target.setSecurityName(user);
+		this.target.setSecurityLevel(level);
+		
+		set(SnmpConstants.version3);
+	}
+	
+	public void setCommunity(OctetString community, int version) {
+		this.pdu = new PDU();
+		
+		this.nextPDU = new PDU();
+		
+		this.target = new CommunityTarget(this.address, community);
+		
+		set(version);
+	}
+
+	public void setHealth(int timeout, int retry) {
+		this.timeout = timeout;
+		this.retry = retry;
 	}
 	
 	@Override
@@ -100,7 +131,7 @@ public abstract class Node implements Runnable, Closeable {
 		this.thread.interrupt();
 		
 		try {
-			this.bq.put(new PDU());
+			this.queue.put(new PDU());
 		} catch (InterruptedException e) {
 		}
 	}
@@ -109,26 +140,23 @@ public abstract class Node implements Runnable, Closeable {
 	public void run() {
 		PDU pdu;
 		long sent;
-		int timeout, retry;
 		
 		init: while (!this.thread.isInterrupted()) {
 			try {
-				pdu = this.bq.take();
+				pdu = this.queue.take();
 				
 				if (this.thread.isInterrupted()) {
 					throw new InterruptedException();
 				}
 				
 				sent = System.currentTimeMillis();
-				timeout = Agent.getHealthTimeout();
-				retry = Agent.getHealthRetry();
 				
-				for (int i=0; i < retry; i++) {
+				for (int i=0; i < this.retry; i++) {
 					if (this.thread.isInterrupted()) {
 						throw new InterruptedException();
 					}
 					
-					if (ip.isReachable(timeout)) {
+					if (ip.isReachable(this.timeout)) {
 						this.data.put("responseTime", this.responseTime = System.currentTimeMillis() - sent);
 						
 						onTimeout(false);
@@ -147,44 +175,6 @@ public abstract class Node implements Runnable, Closeable {
 				onException(ioe);
 			}
 		}
-	}
-	
-	public Node(Snmp snmp, String ip, int udp, OctetString user, int level) throws IOException {
-		this(snmp, ip);
-		
-		pdu = new ScopedPDU();
-		pdu.setType(PDU.GETNEXT);
-		
-		nextPDU = new ScopedPDU();
-		nextPDU.setType(PDU.GETNEXT);
-		
-		// target 설정
-		target = new UserTarget();
-		
-		target.setAddress(new UdpAddress(InetAddress.getByName(ip), udp));
-		target.setVersion(SnmpConstants.version3);
-		target.setSecurityLevel(level);
-		target.setSecurityName(user);
-		target.setTimeout(TIMEOUT_DEF);
-	}
-	
-	public Node(Snmp snmp, String ip, int udp, int version, OctetString community) throws IOException {
-		this(snmp, ip);
-		
-		pdu = new PDU();
-		pdu.setType(PDU.GETNEXT);
-		
-		nextPDU = new PDU();
-		nextPDU.setType(PDU.GETNEXT);
-		
-		target = new CommunityTarget(new UdpAddress(InetAddress.getByName(ip), udp), community);
-		
-		target.setVersion(version);
-		target.setTimeout(TIMEOUT_DEF);
-	}
-	
-	public void setTimeout(long timeout) {
-		this.target.setTimeout(timeout);
 	}
 	
 	private void setEnterprise(int enterprise) {
@@ -218,7 +208,7 @@ public abstract class Node implements Runnable, Closeable {
 		
 		this.pdu.setRequestID(new Integer32(0));
 		
-		this.bq.add(this.pdu);
+		this.queue.add(this.pdu);
 	}
 	
 	public long getFailureRate() {		
@@ -505,7 +495,7 @@ public abstract class Node implements Runnable, Closeable {
 		return false;
 	}
 	
-	private final boolean getNextRequest(PDU request, PDU response) throws IOException {
+	private final boolean hasNextRequest(PDU request, PDU response) throws IOException {
 		Vector<? extends VariableBinding> requestVBs = request.getVariableBindings();
 		Vector<? extends VariableBinding> responseVBs = response.getVariableBindings();
 		Vector<VariableBinding> nextRequests = new Vector<VariableBinding>();
@@ -555,8 +545,8 @@ public abstract class Node implements Runnable, Closeable {
 			throw new IOException(String.format("Node %s reports error status %d", this.target.getAddress(), status));
 		}
 		
-		if (getNextRequest(request, response)) {
-			this.bq.add(this.nextPDU);
+		if (hasNextRequest(request, response)) {
+			parseResponse(this.snmp.send(this.nextPDU, this.target));
 		}
 		else {
 			this.lastResponse = Calendar.getInstance().getTimeInMillis();

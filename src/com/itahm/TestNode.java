@@ -5,8 +5,8 @@ import java.io.IOException;
 import com.itahm.json.JSONObject;
 
 import com.itahm.snmp.TmpNode;
-import com.itahm.table.Table;
 import com.itahm.table.Device;
+import com.itahm.table.Table;
 import com.itahm.util.Util;
 
 public class TestNode extends TmpNode {
@@ -35,16 +35,18 @@ public class TestNode extends TmpNode {
 		
 		// 자동탐색인 경우 device정보가 없으니 생성해 준다.
 		if (this.id == null) {
-			this.id = ((Device)deviceTable).createID(false);
-			
 			try {
-				deviceTable.put(this.id,
+				for (Object id : deviceTable.put(Device.NULL,
 					new JSONObject()
 						.put("ip", super.ip)
 						.put("name", "")
 						.put("type", "unknown")
 						.put("label", "")
-						.put("ifSpeed", new JSONObject()));
+						.put("ifSpeed", new JSONObject())).keySet()) {
+					this.id = (String)id;
+					
+					break;
+				}
 			} catch (IOException ioe) {
 				Agent.syslog(Util.EToString(ioe));
 			}
@@ -52,16 +54,14 @@ public class TestNode extends TmpNode {
 		
 		Agent.removeICMPNode(super.ip);
 		
-		monitorTable.getJSONObject().put(super.ip, new JSONObject()
-			.put("id", this.id)
-			.put("protocol", "snmp")
-			.put("ip", super.ip)
-			.put("profile", profileName)
-			.put("shutdown", false)
-			.put("critical", false));
-		
 		try {
-			monitorTable.save();
+			monitorTable.put(super.ip, new JSONObject()
+				.put("id", this.id)
+				.put("protocol", "snmp")
+				.put("ip", super.ip)
+				.put("profile", profileName)
+				.put("shutdown", false)
+				.put("critical", false));
 		} catch (IOException ioe) {
 			Agent.syslog(Util.EToString(ioe));
 		}

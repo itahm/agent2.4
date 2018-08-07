@@ -12,6 +12,7 @@ import java.util.Calendar;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.TreeSet;
@@ -34,7 +35,6 @@ import com.itahm.table.Device;
 import com.itahm.table.Monitor;
 import com.itahm.table.Profile;
 import com.itahm.table.Table;
-import com.itahm.enterprise.Enterprise;
 
 public class Agent {
 
@@ -53,7 +53,7 @@ public class Agent {
 	
 	/* Configuration */
 	
-	public final static String VERSION = "2.0.3.3";
+	public final static String VERSION = "2.0.3.4";
 	private final static long DAY1 = 24 *60 *60 *1000;
 	private final static String DATA = "data";
 	public final static int MAX_TIMEOUT = 10000;
@@ -62,18 +62,15 @@ public class Agent {
 	public final static int DEF_TIMEOUT = 3000;
 	
 	private static Map<Table.Name, Table> tables = new HashMap<>();
-	private static TreeSet<Integer> validIFType = null;
+	private static Set<Integer> validIFType = null;
 	private static Log log;
 	private static SNMPAgent snmp;
 	private static ICMPAgent icmp;
-	public final static Enterprise enterprise = new Enterprise();
 	private final HTTPServer server;
 	private static JSONObject config;
 	private static Batch batch;
 	public static File root;
 	private static File dataRoot;
-	private static int timeout;
-	private static int retry;
 	
 	public Agent(File path, int tcp) throws IOException {
 		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
@@ -94,11 +91,7 @@ public class Agent {
 		config = getTable(Table.Name.CONFIG).getJSONObject();
 		
 		if (config.has("iftype")) {
-			setValidIFType(config.getString("iftype"));
-		}
-		
-		if (config.has("health")) {
-			setHealthOption(config.getInt("health"));
+			validIFType = parseIFType(config.getString("iftype"));
 		}
 		
 		log = new Log(dataRoot);
@@ -112,8 +105,29 @@ public class Agent {
 	
 	private static void initialize() throws IOException {
 		try {
-			snmp = new SNMPAgent(dataRoot);
-			icmp = new ICMPAgent();
+			long interval = 10000;
+			int timeout = 10000,
+				retry = 1,
+				rollingInterval = 1;
+			
+			if (config.has("health")) {
+				int health = config.getInt("health");
+
+				timeout = Byte.toUnsignedInt((byte)(health & 0x0f)) *1000;
+				retry = Byte.toUnsignedInt((byte)((health >>= 4)& 0x0f));
+			}
+			
+			if (config.has("requestTimer")) {
+				interval = config.getLong("requestTimer");
+			}
+			
+			if (config.has("interval")) {
+				rollingInterval = config.getInt("interval");
+			}
+			
+			snmp = new SNMPAgent(dataRoot, timeout, retry, interval, rollingInterval);
+			
+			icmp = new ICMPAgent(timeout, retry, interval);
 		} catch (IOException ioe) {
 			close();
 			
@@ -197,39 +211,41 @@ public class Agent {
 		
 		return true;
 	}
-	
-	public static int getRollingInterval() {
-		return config.getInt("interval");
+	public static void setRollingInterval(int interval) {
+		config("interval", interval);
+		
+		snmp.setRollingInterval(interval);
 	}
 	
-	public static int getHealthTimeout() {
-		return timeout;
+	public static void setInterval(long interval) {
+		config("requestTimer", interval);
+		
+		snmp.setInterval(interval);
+		icmp.setInterval(interval);
 	}
 	
-	public static int getHealthRetry() {
-		return retry;
+	public static void setHealth(int health) throws IOException {
+		int timeout = Byte.toUnsignedInt((byte)(health & 0x0f)) *1000,
+			retry = Byte.toUnsignedInt((byte)((health >> 4)& 0x0f));
+		
+		snmp.setHealth(timeout, retry);
+		icmp.setHealth(timeout, retry);
+		
+		config("health", health);
 	}
 	
-	public static void setHealthOption(int health) throws IOException {
-		retry = Byte.toUnsignedInt((byte)(health & 0x0f));
-		
-		health >>= 4;
-		
-		timeout = Byte.toUnsignedInt((byte)(health & 0x0f));
-		
-		config.put("health", health);
-		
-		getTable(Table.Name.CONFIG).save();
-	}
-	
-	public static void config(String key, Object value) throws IOException {
+	public static void config(String key, Object value) {
 		config.put(key, value);
 		
-		getTable(Table.Name.CONFIG).save();
+		try {
+			getTable(Table.Name.CONFIG).save();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
-	public static void setValidIFType(String iftype) {
-		TreeSet<Integer> ts = new TreeSet<>();
+	private static Set<Integer> parseIFType(String iftype) {
+		Set<Integer> ts = new TreeSet<>();
 		
 		for (String type : iftype.split(",")) {
 			try {
@@ -238,7 +254,13 @@ public class Agent {
 			catch (NumberFormatException nfe) {}
 		}
 		
-		validIFType = ts.size() == 0? null: ts;
+		return ts.size() == 0? null: ts;
+	}
+	
+	public static void setValidIFType(String iftype) {
+		validIFType = parseIFType(iftype);
+		
+		Agent.config("iftype", iftype);
 	}
 	
 	public static boolean isValidIFType(int type) {
@@ -264,15 +286,9 @@ public class Agent {
 	}
 	
 	public static void sendEvent(String message) {
-		if (config.has("sms") && config.getBoolean("sms")) {
-			enterprise.sendEvent(message);
-		}
 	}
 	
 	public static void sendEvent(JSONObject message) {
-		if (config.has("sms") && config.getBoolean("sms")) {
-			enterprise.sendEvent("");
-		}
 	}
 	
 	public static void syslog(String msg) {
@@ -353,10 +369,6 @@ public class Agent {
 	 */
 	public static void setCritical(String ip, JSONObject critical) throws IOException {
 		snmp.setCritical(ip, critical);
-	}
-	
-	public static long getRequestTimer() {
-		return config.getLong("requestTimer");
 	}
 	
 	public static boolean addUSM(JSONObject usm) {
@@ -505,8 +517,6 @@ public class Agent {
 		close();
 		
 		batch.stop();
-		
-		enterprise.close();
 		
 		try {
 			this.server.close();

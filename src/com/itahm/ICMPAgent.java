@@ -4,8 +4,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
@@ -17,11 +17,18 @@ import com.itahm.util.Util;
 
 public class ICMPAgent implements ICMPListener, Closeable {
 	
-	private final Map<String, ICMPNode> nodeList = new HashMap<>();
+	private final Map<String, ICMPNode> nodeList = new ConcurrentHashMap<>();
 	private final Table monitorTable = Agent.getTable(Table.Name.MONITOR);
+	private long interval;
+	private int timeout,
+		retry;
 	
-	public ICMPAgent() throws IOException {
+	public ICMPAgent(int timeout, int retry, long interval) throws IOException {
 		JSONObject snmpData = monitorTable.getJSONObject();
+	
+		this.timeout = timeout;
+		this.retry = retry;
+		this.interval = interval;
 		
 		for (Object ip : snmpData.keySet()) {
 			try {
@@ -40,9 +47,9 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		try {
 			ICMPNode node = new ICMPNode(this, ip);
 			
-			synchronized (this.nodeList) {
-				this.nodeList.put(ip, node);
-			}
+			node.setHealth(this.timeout, this.retry);
+			
+			this.nodeList.put(ip, node);
 			
 			node.ping(0);
 		} catch (UnknownHostException uhe) {
@@ -123,6 +130,19 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		}).start();
 	}
 	
+	public void setHealth(int timeout, int retry) {
+		this.timeout = timeout;
+		this.retry = retry;
+		
+		for (String ip : this.nodeList.keySet()) {
+			this.nodeList.get(ip).setHealth(timeout, retry);
+		}
+	}
+	
+	public void setInterval(long interval) {
+		this.interval = interval;
+	}
+	
 	public void onSuccess(ICMPNode node, long time) {
 		JSONObject monitor = this.monitorTable.getJSONObject(node.ip);
 		
@@ -147,7 +167,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 				.put("message", String.format("%s ICMP 응답 정상", node.ip)), true);
 		}
 		
-		node.ping(1000);
+		node.ping(this.interval);
 	}
 	
 	public void onFailure(ICMPNode node) {
@@ -201,16 +221,6 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		if (e != null) {
 			Agent.syslog(Util.EToString(e));
 		}
-	}
-
-	@Override
-	public int getTimeout() {
-		return Agent.getHealthTimeout();
-	}
-
-	@Override
-	public int getRetry() {
-		return Agent.getHealthRetry();
 	}
 	
 }

@@ -26,12 +26,6 @@ abstract public class Critical {
 	
 	private final Map<Resource, Map<String, Value>> mapping = new HashMap<>();
 	
-	public Critical(JSONObject critical) {
-		if (critical != null) {
-			parse(critical);
-		}
-	}
-	
 	private void parse(JSONObject critical) {
 		Map<String, Value> map;
 		JSONObject jsono, value;
@@ -118,88 +112,14 @@ abstract public class Critical {
 		}
 	}
 	
-	public void clear() {
+	public void set(JSONObject critical) {
 		this.mapping.clear();
+		
+		if (critical != null) {
+			parse(critical);
+		}
 	}
 	
-	public void reset(JSONObject critical) {
-		this.mapping.clear();
-		
-		parse(critical);
-	}
-	/*
-	public void clear() {
-		Map<String, Value> map;
-		
-		for (Resource resource : this.mapping.keySet()) {
-			map = this.mapping.get(resource);
-			
-			if (resource.equals(Resource.PROCESSOR)) {
-				for (String index : map.keySet()) {
-					if ("0".equals(index)) {
-						continue;
-					}
-					
-					if (remove(map.get(index), Resource.PROCESSOR, "0")) {
-						break;
-					}
-				}
-			}
-			else {
-				for (String index : map.keySet()) {
-					remove(map.get(index), resource, index);
-				}
-			}
-		}
-		
-		this.mapping.clear();
-	}
-	
-	public void reset(JSONObject critical) {
-		Map<String, Value> map;
-		JSONObject jsono;
-		
-		for (Resource resource : this.mapping.keySet()) {
-			map = this.mapping.get(resource);
-			jsono = critical.has(resource.toString())? critical.getJSONObject(resource.toString()): null;
-			
-			if (resource.equals(Resource.PROCESSOR)) {
-				if (jsono == null) {
-					for (String index : map.keySet()) {
-						if ("0".equals(index)) {
-							continue;
-						}
-						
-						if (remove(map.get(index), Resource.PROCESSOR, "0")) {
-							break;
-						}
-					}
-				}
-			}
-			else {
-				for (String index : map.keySet()) {
-					if (jsono == null || !jsono.has(index)) {
-						remove(map.get(index), resource, index);
-					}
-				}
-			}
-		}
-		
-		this.mapping.clear();
-		
-		parse(critical);
-	}
-	
-	private boolean remove(Value value, Resource resource, String index) {
-		if (!value.isCritical()) {
-			return false;
-		}
-		
-		onCritical(false, resource.toString(), index, -1, value.getDescription());
-		
-		return true;
-	}
-	*/
 	class Value {
 		
 		private final int limit;

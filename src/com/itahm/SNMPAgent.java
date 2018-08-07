@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.UnknownHostException;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -15,7 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 
-import org.snmp4j.PDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.mp.MPv3;
 import org.snmp4j.mp.SnmpConstants;
@@ -29,11 +27,10 @@ import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
-import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 
-import com.itahm.snmp.RequestOID;
 import com.itahm.snmp.TmpNode;
+import com.itahm.table.Device;
 import com.itahm.table.Table;
 import com.itahm.util.DataCleaner;
 import com.itahm.util.TopTable;
@@ -70,17 +67,24 @@ public class SNMPAgent extends Snmp implements Closeable {
 	public final File nodeRoot;
 	
 	private final Map<String, SNMPNode> nodeList = new ConcurrentHashMap<String, SNMPNode>();
+	private final Device deviceTable;
 	private final Table monitorTable;
 	private final Table profileTable;
 	private final Table criticalTable;
 	private final TopTable<Resource> topTable;
-	private final Map<String, JSONObject> ifMap = new HashMap<>();
 	private final Timer timer;
 	
-	public SNMPAgent(File root) throws IOException {
+	private long interval;
+	private int rollingInterval;
+	private int timeout;
+	private int retry;
+	
+	public SNMPAgent(File root, int timeout, int retry, long interval, int rollingInterval) throws IOException {
 		super(new DefaultUdpTransportMapping());
 		
 		System.out.println("SNMP manager start.");
+		
+		deviceTable = (Device)Agent.getTable(Table.Name.DEVICE);
 		
 		monitorTable = Agent.getTable(Table.Name.MONITOR);
 		
@@ -95,24 +99,10 @@ public class SNMPAgent extends Snmp implements Closeable {
 		nodeRoot = new File(root, "node");
 		nodeRoot.mkdir();
 		
-		_initialize();
-	}
-	
-	public void _initialize() throws IOException {
-		JSONObject deviceData = Agent.getTable(Table.Name.DEVICE).getJSONObject(),
-			device, ifSpeed;
-		
-		for (Object id : deviceData.keySet()) {
-			device = deviceData.getJSONObject((String)id);
-			
-			if (device.has("ifSpeed")) {
-				ifSpeed = device.getJSONObject("ifSpeed");
-				
-				if (ifSpeed.length() > 0 && device.has("ip")) {
-					this.ifMap.put(device.getString("ip"), ifSpeed);
-				}
-			}
-		}
+		this.interval = interval;
+		this.rollingInterval = rollingInterval;
+		this.timeout = timeout;
+		this.retry = retry;
 		
 		initUSM();
 		
@@ -121,36 +111,12 @@ public class SNMPAgent extends Snmp implements Closeable {
 		initNode();
 	}
 	
-	public void setRequestOID(PDU pdu) {
-		pdu.add(new VariableBinding(RequestOID.sysDescr));
-		pdu.add(new VariableBinding(RequestOID.sysObjectID));
-		pdu.add(new VariableBinding(RequestOID.sysName));
-		pdu.add(new VariableBinding(RequestOID.sysServices));
-		pdu.add(new VariableBinding(RequestOID.ifDescr));
-		pdu.add(new VariableBinding(RequestOID.ifType));
-		pdu.add(new VariableBinding(RequestOID.ifSpeed));
-		pdu.add(new VariableBinding(RequestOID.ifPhysAddress));
-		pdu.add(new VariableBinding(RequestOID.ifAdminStatus));
-		pdu.add(new VariableBinding(RequestOID.ifOperStatus));
-		pdu.add(new VariableBinding(RequestOID.ifName));
-		pdu.add(new VariableBinding(RequestOID.ifInOctets));
-		pdu.add(new VariableBinding(RequestOID.ifInErrors));
-		pdu.add(new VariableBinding(RequestOID.ifOutOctets));
-		pdu.add(new VariableBinding(RequestOID.ifOutErrors));
-		pdu.add(new VariableBinding(RequestOID.ifHCInOctets));
-		pdu.add(new VariableBinding(RequestOID.ifHCOutOctets));
-		pdu.add(new VariableBinding(RequestOID.ifHighSpeed));
-		pdu.add(new VariableBinding(RequestOID.ifAlias));
-		pdu.add(new VariableBinding(RequestOID.hrSystemUptime));
-		pdu.add(new VariableBinding(RequestOID.hrProcessorLoad));
-		pdu.add(new VariableBinding(RequestOID.hrSWRunName));
-		pdu.add(new VariableBinding(RequestOID.hrStorageType));
-		pdu.add(new VariableBinding(RequestOID.hrStorageDescr));
-		pdu.add(new VariableBinding(RequestOID.hrStorageAllocationUnits));
-		pdu.add(new VariableBinding(RequestOID.hrStorageSize));
-		pdu.add(new VariableBinding(RequestOID.hrStorageUsed));
-	}
-	
+	/**
+	 * TestNode 에서 onSuccess 시 호출됨
+	 * @param ip
+	 * @param profileName
+	 * @return
+	 */
 	public boolean  registerNode(String ip, String profileName) {
 		if (Agent.limit > 0 && this.nodeList.size() >= Agent.limit) {
 			Agent.log(new JSONObject().
@@ -170,6 +136,12 @@ public class SNMPAgent extends Snmp implements Closeable {
 		}
 	}
 	
+	/**
+	 * 초기화시 일괄등록하거나 registerNode가 호출되는 경우
+	 * @param ip
+	 * @param profileName
+	 * @throws IOException
+	 */
 	private void addNode(String ip, String profileName) throws IOException {		
 		final JSONObject profile = profileTable.getJSONObject(profileName);
 		
@@ -179,38 +151,38 @@ public class SNMPAgent extends Snmp implements Closeable {
 			return ;
 		}
 		
+		int version = SnmpConstants.version1;
 		SNMPNode node;
+		JSONObject device;
 		
 		try {
 			switch(profile.getString("version")) {
 			case "v3":
-				node = SNMPNode.getInstance(this, ip, profile.getInt("udp"),
+				node = new SNMPNode(this, ip, profile.getInt("udp"), SnmpConstants.version3,
 					profile.getString("user"),
-					(profile.has("md5") || profile.has("sha"))?
-						(profile.has("des")) ?
-							SecurityLevel.AUTH_PRIV: SecurityLevel.AUTH_NOPRIV : SecurityLevel.NOAUTH_NOPRIV,
-					this.criticalTable.getJSONObject(ip),
-					this.ifMap.containsKey(ip)? this.ifMap.get(ip): new JSONObject()
-					);
+					(profile.has("md5") || profile.has("sha"))? (profile.has("des")) ?
+							SecurityLevel.AUTH_PRIV: SecurityLevel.AUTH_NOPRIV : SecurityLevel.NOAUTH_NOPRIV);
 				
 				break;
 			
 			case "v2c":
-				node = SNMPNode.getInstance(this, ip, profile.getInt("udp"),
-					SnmpConstants.version2c,
-					profile.getString("community"),
-					this.criticalTable.getJSONObject(ip),
-					this.ifMap.containsKey(ip)? this.ifMap.get(ip): new JSONObject());
-				
-				break;
+				version = SnmpConstants.version2c;
 				
 			default:
-				node = 	SNMPNode.getInstance(this, ip, profile.getInt("udp"),
-					SnmpConstants.version1,
-					profile.getString("community"),
-					this.criticalTable.getJSONObject(ip),
-					this.ifMap.containsKey(ip)? this.ifMap.get(ip): new JSONObject());
+				node = new SNMPNode(this, ip, profile.getInt("udp"), version,
+					profile.getString("community"), -1);
 			}
+			
+			device = deviceTable.getDevicebyIP(ip);
+			if (device != null) {
+				if (device.has("ifSpeed")) {
+					node.setInterface(device.getJSONObject("ifSpeed"));
+				}
+			}
+			
+			node.setCritical(this.criticalTable.getJSONObject(ip));
+			node.setHealth(timeout, retry);
+			node.setRollingInterval(this.rollingInterval);
 			
 			this.nodeList.put(ip, node);
 			
@@ -368,6 +340,25 @@ public class SNMPAgent extends Snmp implements Closeable {
 		this.monitorTable.save();
 		
 		node.setCritical(critical);
+	}
+	
+	public void setInterval(long interval) {
+		this.interval = interval;
+	}
+	
+	public void setRollingInterval(int interval) {
+		for (String ip : this.nodeList.keySet()) {
+			this.nodeList.get(ip).setRollingInterval(interval);
+		}
+	}
+	
+	public void setHealth(int timeout, int retry) {
+		this.timeout = timeout;
+		this.retry = retry;
+		
+		for (String ip : this.nodeList.keySet()) {
+			this.nodeList.get(ip).setHealth(timeout, retry);
+		}
 	}
 	
 	/**
@@ -662,7 +653,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			@Override
 			public void onComplete(long count) {
 				if (count > 0) {
-					Agent.syslog(String.format("데이터 정리 %d 건 완료.", count));
+					Agent.syslog(String.format("�뜲�씠�꽣 �젙由� %d 嫄� �셿猷�.", count));
 				}
 			}
 		};
@@ -748,7 +739,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				.put("ip", ip)
 				.put("shutdown", false)
 				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP 응답 정상", ip)), true);
+				.put("message", String.format("%s SNMP �쓳�떟 �젙�긽", ip)), true);
 		}
 	}
 	
@@ -782,7 +773,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				.put("ip", ip)
 				.put("shutdown", true)
 				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP 응답 없음", ip)), true);
+				.put("message", String.format("%s SNMP �쓳�떟 �뾾�쓬", ip)), true);
 		}
 		
 		sendRequest(node);
@@ -869,10 +860,10 @@ public class SNMPAgent extends Snmp implements Closeable {
 			.put("rIndex", index) // event의 index가 자동생성되므로 "index" 는 쓰면 안됨
 			.put("critical", isCritical)
 			.put("rate", rate)
-			.put("message", String.format("%s [%s]%s %s 임계 %s",
+			.put("message", String.format("%s [%s]%s %s �엫怨� %s",
 				ip, resource, description == null? "": (" "+ description),
-				rate > -1? String.format("%d%%", rate): "설정해제",
-				isCritical? "초과": "정상")), true);
+				rate > -1? String.format("%d%%", rate): "�꽕�젙�빐�젣",
+				isCritical? "珥덇낵": "�젙�긽")), true);
 	
 	}
 	
@@ -897,7 +888,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 					sendRequest(node);
 				}
 				
-			}, Agent.getRequestTimer());
+			}, this.interval);
 	}
 	
 	private final void sendRequest(SNMPNode node) {

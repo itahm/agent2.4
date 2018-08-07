@@ -2,6 +2,8 @@ package com.itahm.table;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.itahm.json.JSONObject;
 import com.itahm.Agent;
@@ -10,19 +12,29 @@ import com.itahm.http.Response;
 
 public class Device extends Table {
 	
+	public static final String NULL = "";
 	private static final String PREFIX_DEVICE = "node.";
 	private static final String PREFIX_GROUP = "group.";
 	
 	private long groupOrder = -1;
 	private long deviceOrder = -1;
 	
+	private final Map<String, JSONObject> idMap = new HashMap<>();
+	
 	public Device(File dataRoot) throws IOException {
 		super(dataRoot, Name.DEVICE);
 		
+		JSONObject device;
 		String id;
 		
 		for (Object key : super.table.keySet()) {
 			id = (String)key;
+			
+			device = super.table.getJSONObject(id);
+			
+			if (device.has("ip")) {
+				idMap.put(device.getString("ip"), device);
+			}
 			
 			if (id.indexOf(PREFIX_DEVICE) == 0) {
 				try {
@@ -53,6 +65,10 @@ public class Device extends Table {
 		final JSONObject posData = posTable.getJSONObject(),
 			pos = posTable.getJSONObject(id);
 		
+		if (device.has("ip")) {
+			this.idMap.remove(device.getString("ip"));
+		}
+		
 		if (pos != null) {
 			JSONObject peer;
 			for (Object key : pos.getJSONObject("ifEntry").keySet()) {
@@ -77,14 +93,41 @@ public class Device extends Table {
 			}
 		}
 		else if (device.has("ip")){
+			String ip = device.getString("ip");
 			// monitor에서 critical을 함께 삭제함
-			Agent.getTable(Name.MONITOR).put(device.getString("ip"), null);
+			Agent.getTable(Name.MONITOR).put(ip, null);
+			
+			// idMap에서 제거
+			this.idMap.remove(ip);
 		}
 	}
 	
-	public String createID(boolean isGroup) {
-		return isGroup? String.format("%s%d", PREFIX_GROUP, ++this.groupOrder):
+	private String add(JSONObject device) {
+		String id = (device.has("group") && device.getBoolean("group"))?
+			String.format("%s%d", PREFIX_GROUP, ++this.groupOrder):
 			String.format("%s%d", PREFIX_DEVICE, ++this.deviceOrder);
+				
+		if (device.has("ip")) {
+			this.idMap.put(device.getString("ip"), device);
+		}
+		
+		return id;
+	}
+	
+	private void modify(String id, JSONObject device) {
+		if (device.has("ip")) {
+			String ip = device.getString("ip");
+			
+			if (!this.idMap.containsKey(ip)) {
+				this.idMap.put(ip, device);
+			}
+		}
+		
+		Agent.setInterface(device);
+	}
+	
+	public JSONObject getDevicebyIP(String ip) {
+		return this.idMap.get(ip);
 	}
 	/**
 	 * 추가인 경우 position 기본 정보를 생성해 주어야 하며,
@@ -96,11 +139,12 @@ public class Device extends Table {
 		if (device == null) { // 삭제
 			remove(id);
 		}
-		else if ("".equals(id)){ // 추가
-			id = createID(device.has("group") && device.getBoolean("group"));
+		else if (NULL.equals(id)){ // 추가
+			id = add(device);
+			
 		}
 		else { // 수정
-			Agent.setInterface(device);
+			modify(id, device);
 		}
 		
 		super.put(id, device);

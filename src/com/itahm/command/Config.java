@@ -33,23 +33,25 @@ public class Config implements Command {
 				
 				break;
 			case "interval":
+				Agent.setRollingInterval(data.getInt("value"));
+				
+				break;
+				
 			case "top":
 				Agent.config(key, data.getInt("value"));
 			
 				break;
 			case "iftype":
-				String iftype = data.getString("value");
+				Agent.setValidIFType(data.getString("value"));
 				
-				Agent.config(key, iftype);
-			
-				Agent.setValidIFType(iftype);
 				break;
 			case "requestTimer":
-				Agent.config(key, data.getLong("value"));
+				Agent.setInterval(data.getLong("value"));
 				
 				break;
 			case "health":
-				Agent.setHealthOption(data.getInt("health"));
+				Agent.setHealth(data.getInt("value"));
+				
 				break;
 			default:
 				Agent.config(key, data.getString("value"));
