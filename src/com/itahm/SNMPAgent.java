@@ -653,7 +653,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			@Override
 			public void onComplete(long count) {
 				if (count > 0) {
-					Agent.syslog(String.format("�뜲�씠�꽣 �젙由� %d 嫄� �셿猷�.", count));
+					Agent.syslog(String.format("데이터 정리 %d 건 완료.", count));
 				}
 			}
 		};
@@ -739,7 +739,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				.put("ip", ip)
 				.put("shutdown", false)
 				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP �쓳�떟 �젙�긽", ip)), true);
+				.put("message", String.format("%s SNMP 응답 정상", ip)), true);
 		}
 	}
 	
@@ -773,7 +773,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				.put("ip", ip)
 				.put("shutdown", true)
 				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP �쓳�떟 �뾾�쓬", ip)), true);
+				.put("message", String.format("%s SNMP 응답 없음", ip)), true);
 		}
 		
 		sendRequest(node);
@@ -860,10 +860,10 @@ public class SNMPAgent extends Snmp implements Closeable {
 			.put("rIndex", index) // event의 index가 자동생성되므로 "index" 는 쓰면 안됨
 			.put("critical", isCritical)
 			.put("rate", rate)
-			.put("message", String.format("%s [%s]%s %s �엫怨� %s",
-				ip, resource, description == null? "": (" "+ description),
-				rate > -1? String.format("%d%%", rate): "�꽕�젙�빐�젣",
-				isCritical? "珥덇낵": "�젙�긽")), true);
+			.put("message", String.format("%s [%s]%s %s 임계 %s",
+					ip, resource, description == null? "": (" "+ description),
+					rate > -1? String.format("%d%%", rate): "설정해제",
+					isCritical? "초과": "정상")), true);
 	
 	}
 	
