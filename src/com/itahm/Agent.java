@@ -601,10 +601,6 @@ public class Agent {
 			}
 		}
 		
-		root = new File(root, DATA);
-		
-		root.mkdir();
-		
 		if (expire > 0) {
 			if (Calendar.getInstance().getTimeInMillis() > expire) {
 				System.out.println("Check your License[2].");
