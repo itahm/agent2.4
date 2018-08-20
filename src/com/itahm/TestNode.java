@@ -3,7 +3,7 @@ package com.itahm;
 import java.io.IOException;
 
 import com.itahm.json.JSONObject;
-
+import com.itahm.snmp.Node;
 import com.itahm.snmp.TmpNode;
 import com.itahm.table.Device;
 import com.itahm.table.Table;
@@ -12,11 +12,16 @@ import com.itahm.util.Util;
 public class TestNode extends TmpNode {
 
 	private final SNMPAgent agent;
-	// onFailure : 정상 테스트인경우 true, 자동탐색일 경우 false
 	private String id;
 	
+	/**
+	 * 
+	 * @param agent
+	 * @param ip
+	 * @param id 자동탐색인 경우 null
+	 */
 	public TestNode(SNMPAgent agent, String ip, String id) {
-		super(agent, ip, Agent.MAX_TIMEOUT);
+		super(agent, ip, Node.TIMEOUT_DEF);
 		
 		this.agent = agent;
 		

@@ -118,10 +118,12 @@ public class SNMPAgent extends Snmp implements Closeable {
 	 * @return
 	 */
 	public boolean  registerNode(String ip, String profileName) {
-		if (Agent.limit > 0 && this.nodeList.size() >= Agent.limit) {
+		int limit = Agent.getLimit();
+		
+		if (limit > 0 && this.nodeList.size() >= limit) {
 			Agent.log(new JSONObject().
 				put("origin", "system").
-				put("message", String.format("라이선스 수량 %d 을(를) 초과하였습니다.  %d", Agent.limit)), true);
+				put("message", String.format("라이선스 수량 %d 을(를) 초과하였습니다.  %d", limit)), true);
 			
 			return false;
 		}

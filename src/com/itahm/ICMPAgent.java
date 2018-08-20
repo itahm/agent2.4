@@ -91,10 +91,26 @@ public class ICMPAgent implements ICMPListener, Closeable {
 				boolean isReachable = false;
 				
 				try {
-					isReachable = InetAddress.getByName(ip).isReachable(Agent.DEF_TIMEOUT);
-				} catch (IOException e) {
-					Agent.syslog(Util.EToString(e));
-				}
+					InetAddress target = InetAddress.getByName(ip);
+					
+					for (int i=0; i<retry; i++) {
+						if (Thread.interrupted()) {
+							break;
+						}
+						
+						try {
+							if (target.isReachable(timeout)) {
+								isReachable = true;
+								
+								break;
+							}
+						} catch (IOException ioe) {
+							ioe.printStackTrace();
+							
+							break;
+						}
+					}
+				} catch (UnknownHostException uhe) {}
 				
 				if (!isReachable) {
 					Agent.log(new JSONObject()

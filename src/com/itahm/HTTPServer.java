@@ -27,7 +27,7 @@ public class HTTPServer extends Listener {
 	public static void sendResponse(Request request, Response response) throws IOException {
 		String origin = request.getRequestHeader(Request.Header.ORIGIN);
 		
-		if (origin == null || (Agent.isDemo && !Agent.isDebug) ) {
+		if (origin == null || (Agent.isOnline) ) {
 			origin = "http://itahm.com";
 		}
 		
@@ -42,6 +42,29 @@ public class HTTPServer extends Listener {
 		System.out.println("HTTP Server start.");
 	}
 
+	@Override
+	public void doPost(Request request, Response response) {
+		JSONObject data;
+		
+		try {
+			data = new JSONObject(new String(request.getRequestBody(), StandardCharsets.UTF_8.name()));
+			
+			if (!data.has("command")) {
+				response = Response.getInstance(Response.Status.BADREQUEST
+					, new JSONObject().put("error", "command not found").toString());
+			}
+			else {
+				response = agent.executeRequest(request, data);
+			}
+		} catch (JSONException e) {
+			response = Response.getInstance(Response.Status.BADREQUEST
+				, new JSONObject().put("error", "invalid json request").toString());
+		} catch (UnsupportedEncodingException e) {
+			response = Response.getInstance(Response.Status.BADREQUEST
+				, new JSONObject().put("error", "UTF-8 encoding required").toString());
+		}
+	}
+	
 	@Override
 	protected void onRequest(Request request) throws IOException {
 		Response response;

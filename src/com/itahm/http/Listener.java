@@ -207,6 +207,9 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 	abstract protected void onClose(Request request);
 	abstract protected void onException(Exception e);
 	
+	public void doPost(Request request, Response response) {
+	}
+	
 	public static void main(String [] args) throws IOException, InterruptedException {
 		final Listener server = new Listener(20114) {
 

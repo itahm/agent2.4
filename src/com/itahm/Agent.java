@@ -5,10 +5,9 @@ import java.io.IOException;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,26 +39,15 @@ public class Agent {
 
 	/* Configuration */
 	
-	// args로 debug가 넘어오면 true로 변경됨
-	public static boolean isDebug = false;
-	// 30일 데모 버전 출시용 true, itahm.com의 요청만 처리함
-	public static boolean isDemo = false;
+	// true: itahm.com의 요청만 처리함
+	public static boolean isOnline = false;
 	// node 제한 0: 무제한
-	public static int limit = 0;
-	// 라이센스 mac address null: 데모 버전에만 적용할것
-	private static final byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
-	// 라이선스 만료일 0: 무제한, isDemo true인 경우 자동 set
-	private static long expire = 0; // 1546268400000L;
-	
+	private static int limit = 0;
+	private static long expire = 0;
 	/* Configuration */
 	
 	public final static String VERSION = "2.0.3.4";
-	private final static long DAY1 = 24 *60 *60 *1000;
 	private final static String DATA = "data";
-	public final static int MAX_TIMEOUT = 10000;
-	public final static int ICMP_INTV = 1000;
-	public final static int MID_TIMEOUT = 5000;
-	public final static int DEF_TIMEOUT = 3000;
 	
 	private static Map<Table.Name, Table> tables = new HashMap<>();
 	private static Set<Integer> validIFType = null;
@@ -72,9 +60,11 @@ public class Agent {
 	public static File root;
 	private static File dataRoot;
 	
-	public Agent(File path, int tcp) throws IOException {
+	public Agent(File path, int tcp, long lExpire, int iLimit) throws IOException {
 		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
 		
+		expire = lExpire;
+		limit = iLimit;
 		root = path;
 		dataRoot = new File(root, DATA);
 		
@@ -211,6 +201,11 @@ public class Agent {
 		
 		return true;
 	}
+	
+	public static int getLimit() {
+		return limit;
+	}
+	
 	public static void setRollingInterval(int interval) {
 		config("interval", interval);
 		
@@ -534,12 +529,10 @@ public class Agent {
 		.put("usage", batch.lastDiskUsage)
 		.put("java", System.getProperty("java.version"))
 		.put("path", root.getAbsoluteFile().toString())
-		.put("license", license == null? false: true)
-		.put("demo", isDemo)
 		.put("expire", expire);
 	}
 	
-	public static boolean hasMAC(byte [] mac) throws SocketException {
+	public static boolean isValidLicense(byte [] mac) throws SocketException {
 		if (mac == null) {
 			return true;
 		}
@@ -566,15 +559,18 @@ public class Agent {
 	}
 	
 	public static void main(String[] args) throws IOException {
-		if (!hasMAC(license)) {
-			System.out.println("Check your License.");
+		byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
+		long expire = 0; // 1546268400000L;
+		int limit = 0;
+		int tcp = 2014;
+		File root = null;
+		Timer timer = null;
+		
+		if (!isValidLicense(license)) {
+			System.out.println("Check your License[1].");
 			
 			return;
 		}
-		
-		int tcp = 2014;
-		Calendar c = Calendar.getInstance();
-		File path = null, root, dataRoot;
 		
 		for (int i=0, _i=args.length; i<_i; i++) {
 			if (args[i].indexOf("-") != 0) {
@@ -582,12 +578,8 @@ public class Agent {
 			}
 			
 			switch(args[i].substring(1).toUpperCase()) {
-			case "DEBUG":
-				isDebug = true;
-				
-				break;
 			case "PATH":
-				path = new File(args[++i]);
+				root = new File(args[++i]);
 				
 				break;
 			case "TCP":
@@ -601,91 +593,47 @@ public class Agent {
 			
 		}
 		
-		try {
-			root = path == null? new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile(): path;
-			dataRoot = new File(root, DATA);
-			
-			if (!dataRoot.exists()) {
-				if (!dataRoot.mkdir()) {
-					System.out.println("데이터베이스를 초기화 할 수 없습니다[1].");
-					
-					return;
-				} 
+		if (root == null || !root.isDirectory()) {
+			try {
+				root = new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile();
+			} catch (URISyntaxException e) {
+				throw new IOException();
 			}
-			else if (!dataRoot.isDirectory()) {
-				System.out.println("데이터베이스를 초기화 할 수 없습니다[2].");
+		}
+		
+		root = new File(root, DATA);
+		
+		root.mkdir();
+		
+		if (expire > 0) {
+			if (Calendar.getInstance().getTimeInMillis() > expire) {
+				System.out.println("Check your License[2].");
 				
 				return;
 			}
-
-			if (isDemo) {
-				try {
-					c.setTimeInMillis(Files.readAttributes(dataRoot.toPath(), BasicFileAttributes.class).creationTime().toMillis());
-				} catch (IOException e) {
-					System.out.println("데이터베이스를 초기화 할 수 없습니다[3].");
+			else {
+				timer = new Timer(true);
+			}
+		}
+		
+		final Agent agent = new Agent(root, tcp, expire, limit);
+		
+		if (timer != null) {
+			timer.schedule(new TimerTask() {
+				
+				@Override
+				public void run() {
+					agent.stop();
 					
-					return;
+					System.out.println("Check your License[3].");
 				}
-				
-				c.set(Calendar.MONTH, c.get(Calendar.MONTH) +1);
-				c.set(Calendar.HOUR_OF_DAY, 0);
-				c.set(Calendar.MINUTE, 0);
-				c.set(Calendar.SECOND, 0);
-				c.set(Calendar.MILLISECOND, 0);
-				
-				expire = c.getTimeInMillis();
-			}
-			
-			if (expire > 0 && Calendar.getInstance().getTimeInMillis() > expire) {
-				System.out.println("라이선스가 만료되었습니다.");
-				
-				return;
-			}
-		} catch (URISyntaxException urise) {
-			System.out.println("데이터베이스를 초기화 할 수 없습니다[4].");
-			
-			return;
+			}, new Date(expire));
 		}
 		
 		System.out.format("ITAhM Agent, since 2014.\n");
 		System.out.format("Directory : %s\n", root.getAbsoluteFile());
-		
 		System.out.format("Agent loading...\n");
-		
-		final Agent agent = new Agent(root, tcp);
-		
 		System.out.println("ITAhM agent has been successfully started.");
-		
-		final Timer timer = new Timer();
-		
-		timer.schedule(new TimerTask() {
-			
-			@Override
-			public void run() {
-				if (expire > 0 && Calendar.getInstance().getTimeInMillis() > expire) {
-					System.out.println("라이선스가 만료되었습니다.");
-					
-					agent.stop();
-					
-					timer.cancel();
-				}
-			}
-		}, DAY1);
-
-		try {
-			
-			Runtime.getRuntime().addShutdownHook(
-				new Thread() {
-					public void run() {
-						agent.stop();
-						
-						timer.cancel();
-					}
-				});
-		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
 	}
 	
 }

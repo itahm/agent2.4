@@ -45,7 +45,7 @@ public abstract class Node implements Runnable, Closeable {
 	private final static int DASAN = 6296;
 	private final static int AXGATE = 37288;
 	
-	private final static int TIMEOUT_DEF = 10000;
+	public final static int TIMEOUT_DEF = 10000;
 	
 	public PDU pdu;
 	private PDU nextPDU;
