@@ -5,33 +5,24 @@ import java.io.IOException;
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 import com.itahm.Agent;
-import com.itahm.http.Request;
 import com.itahm.http.Response;
 
-public class Query implements Command {
+public class Query extends Command {
 	
 	@Override
-	public Response execute(Request request, JSONObject data) throws IOException {
-		
+	public void execute(JSONObject request, Response response) throws IOException {
 		try {
-			data = Agent.getNodeData(data);
+			JSONObject body = Agent.getNodeData(request);
 			
-			if (data == null) {
-				return Response.getInstance(Response.Status.BADREQUEST,
-					new JSONObject().put("error", "node or data not found").toString());
+			if (body == null) {
+				throw new JSONException("Node or Data not found.");
 			}
 			
-			// data는 새로 만들어진 것이기에 toString시 동기화 불필요
-			return Response.getInstance(Response.Status.OK, data.toString());
-		}
-		catch(NullPointerException npe) {
-			return Response.getInstance(Response.Status.UNAVAILABLE);
+			response.write(body.toString());
 		}
 		catch (JSONException jsone) {
-			return Response.getInstance(Response.Status.BADREQUEST,
-				new JSONObject().put("error", "invalid json request").toString());
+			response.setStatus(Response.Status.BADREQUEST);
 		}
-		
 	}
 
 }

@@ -74,15 +74,19 @@ public class SNMPAgent extends Snmp implements Closeable {
 	private final TopTable<Resource> topTable;
 	private final Timer timer;
 	
-	private long interval;
-	private int rollingInterval;
-	private int timeout;
-	private int retry;
+	private long interval = 10000;
+	private int rollingInterval = 1;
+	private int timeout = 10000;
+	private int retry = 1;
 	
-	public SNMPAgent(File root, int timeout, int retry, long interval, int rollingInterval) throws IOException {
+	private final int limit;
+	
+	public SNMPAgent(File root, int limit) throws IOException {
 		super(new DefaultUdpTransportMapping());
 		
 		System.out.println("SNMP manager start.");
+		
+		this.limit = limit;
 		
 		deviceTable = (Device)Agent.getTable(Table.Name.DEVICE);
 		
@@ -99,16 +103,48 @@ public class SNMPAgent extends Snmp implements Closeable {
 		nodeRoot = new File(root, "node");
 		nodeRoot.mkdir();
 		
-		this.interval = interval;
-		this.rollingInterval = rollingInterval;
-		this.timeout = timeout;
-		this.retry = retry;
-		
 		initUSM();
 		
-		super.listen();
-		
 		initNode();
+	}
+	
+	private void initUSM() {
+		JSONObject profileData = profileTable.getJSONObject();
+		JSONObject profile;
+		
+		SecurityModels.getInstance().addSecurityModel(new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()), 0));
+		
+		for (Object key : profileData.keySet()) {
+			profile = profileData.getJSONObject((String)key);
+			try {
+				if ("v3".equals(profile.getString("version"))) {
+					addUSM(profile);
+				}
+			}
+			catch (JSONException jsone) {
+				Agent.syslog(Util.EToString(jsone));
+			}
+		}
+	}
+	
+	private void initNode() throws IOException {
+		JSONObject monitorData = this.monitorTable.getJSONObject();
+		JSONObject monitor;
+		String ip;
+		
+		for (Object key : monitorData.keySet()) {
+			ip = (String)key;
+			
+			monitor = monitorData.getJSONObject(ip);
+		
+			if ("snmp".equals(monitor.getString("protocol"))) {
+				addNode(ip, monitor.getString("profile"));
+			}
+		}
+	}
+	
+	public void start() throws IOException {
+		super.listen();
 	}
 	
 	/**
@@ -118,12 +154,10 @@ public class SNMPAgent extends Snmp implements Closeable {
 	 * @return
 	 */
 	public boolean  registerNode(String ip, String profileName) {
-		int limit = Agent.getLimit();
-		
-		if (limit > 0 && this.nodeList.size() >= limit) {
+		if (this.limit > 0 && this.nodeList.size() >= this.limit) {
 			Agent.log(new JSONObject().
 				put("origin", "system").
-				put("message", String.format("라이선스 수량 %d 을(를) 초과하였습니다.  %d", limit)), true);
+				put("message", String.format("라이선스 수량 %d 을(를) 초과하였습니다.  %d", this.limit)), true);
 			
 			return false;
 		}
@@ -192,25 +226,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		}
 		catch (JSONException jsone) {
 			Agent.syslog(Util.EToString(jsone));
-		}
-	}
-	
-	private void initUSM() {
-		JSONObject profileData = profileTable.getJSONObject();
-		JSONObject profile;
-		
-		SecurityModels.getInstance().addSecurityModel(new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()), 0));
-		
-		for (Object key : profileData.keySet()) {
-			profile = profileData.getJSONObject((String)key);
-			try {
-				if ("v3".equals(profile.getString("version"))) {
-					addUSM(profile);
-				}
-			}
-			catch (JSONException jsone) {
-				Agent.syslog(Util.EToString(jsone));
-			}
 		}
 	}
 	
@@ -290,22 +305,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		this.topTable.remove(ip);
 		
 		return true;
-	}
-	
-	private void initNode() throws IOException {
-		JSONObject monitorData = this.monitorTable.getJSONObject();
-		JSONObject monitor;
-		String ip;
-		
-		for (Object key : monitorData.keySet()) {
-			ip = (String)key;
-			
-			monitor = monitorData.getJSONObject(ip);
-		
-			if ("snmp".equals(monitor.getString("protocol"))) {
-				addNode(ip, monitor.getString("profile"));
-			}
-		}
 	}
 	
 	public void resetResponse(String ip) {
@@ -654,9 +653,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			
 			@Override
 			public void onComplete(long count) {
-				if (count > 0) {
-					Agent.syslog(String.format("데이터 정리 %d 건 완료.", count));
-				}
+				System.out.format("데이터 정리 %d 건 완료.", count);
 			}
 		};
 	}
@@ -935,9 +932,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		return count;
 	}
 	
-	/**
-	 * ovverride
-	 */
 	@Override
 	public void close() {
 		this.isClosed = true;

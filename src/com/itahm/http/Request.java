@@ -31,7 +31,7 @@ public class Request implements Closeable {
 	protected final Map<String, String> header = new HashMap<>();
 	
 	private final SocketChannel channel;
-	private final Listener listener;
+	private final HTTPServer listener;
 	private byte [] buffer;
 	private TimerTask task;
 	private String method;
@@ -42,7 +42,7 @@ public class Request implements Closeable {
 	private boolean initialized = true;
 	private Boolean closed = false;
 	
-	public Request(SocketChannel channel, Listener listener) {
+	public Request(SocketChannel channel, HTTPServer listener) {
 		this.channel = channel;
 		this.listener = listener;
 		
@@ -70,7 +70,7 @@ public class Request implements Closeable {
 		}
 	}
 	
-	public byte [] getRequestBody() {
+	public byte [] read() {
 		return this.body.toByteArray();
 	}
 	
@@ -234,8 +234,34 @@ public class Request implements Closeable {
 		return this.version;
 	}
 	
-	public String getRequestHeader(Header name) {
+	public String getHeader(Header name) {
 		return this.header.get(name.toString().toLowerCase());
+	}
+	
+	public Session getSession() {
+		String cookie = getHeader(Request.Header.COOKIE);
+		
+		if (cookie == null) {
+			return null;
+		}
+		
+		String [] cookies = cookie.split("; ");
+		String [] token;
+		Session session = null;
+		
+		for(int i=0, length=cookies.length; i<length; i++) {
+			token = cookies[i].split("=");
+			
+			if (token.length == 2 && "SESSION".equals(token[0])) {
+				session = Session.find(token[1]);
+				
+				if (session != null) {
+					session.update();
+				}
+			}
+		}
+		
+		return session;
 	}
 	
 	public boolean sendResponse(Response response) throws IOException {
@@ -243,7 +269,7 @@ public class Request implements Closeable {
 			if (closed) {
 				return false;
 			}
-
+			
 			ByteBuffer message = response.build();
 			
 			while(message.remaining() > 0) {			

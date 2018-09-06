@@ -19,16 +19,16 @@ public class ICMPAgent implements ICMPListener, Closeable {
 	
 	private final Map<String, ICMPNode> nodeList = new ConcurrentHashMap<>();
 	private final Table monitorTable = Agent.getTable(Table.Name.MONITOR);
-	private long interval;
-	private int timeout,
-		retry;
+	private long interval = 10000;
+	private int timeout = 10000,
+		retry = 1;
 	
-	public ICMPAgent(int timeout, int retry, long interval) throws IOException {
+	public ICMPAgent() throws IOException {		
+		System.out.println("ICMP manager start.");
+	}
+	
+	public void start() {
 		JSONObject snmpData = monitorTable.getJSONObject();
-	
-		this.timeout = timeout;
-		this.retry = retry;
-		this.interval = interval;
 		
 		for (Object ip : snmpData.keySet()) {
 			try {
@@ -39,8 +39,6 @@ public class ICMPAgent implements ICMPListener, Closeable {
 				Agent.syslog(Util.EToString(jsone));
 			}
 		}
-		
-		System.out.println("ICMP manager start.");
 	}
 	
 	private void addNode(String ip) {

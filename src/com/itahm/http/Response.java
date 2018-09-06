@@ -17,8 +17,8 @@ public class Response {
 	public final static String FIELD = "%s: %s"+ CRLF;
 	
 	private final Map<String, String> header = new HashMap<String, String>();
-	private String startLine;
-	private byte [] body;
+	private Status status = Status.OK;
+	private byte [] body = new byte [0];
 	
 	public enum Status {
 		OK(200, "OK"),
@@ -58,72 +58,51 @@ public class Response {
 		}
 	};
 	
-	private Response(Status status, byte [] body) {
-		if (status.equals(Status.NOTALLOWED)) {
-			setResponseHeader("Allow", "GET");
-		}
-		
-		this.startLine = String.format("HTTP/1.1 %d %s" +CRLF, status.getCode(), status.getText());
-		
+	public Response() {
+	}
+	
+	public void setStatus(Status status) {
+		this.status = status;
+	}
+	
+	public Status getStatus() {
+		return this.status;
+	}
+	
+	public void write(byte [] body) {
 		this.body = body;
 	}
 	
-	/**
-	 * 
-	 * @param request
-	 * @param status
-	 * @param body
-	 * @return
-	 * 
-	 */
-	public static Response getInstance(Status status, String body) {
-		try {
-			return new Response(status, body.getBytes(StandardCharsets.UTF_8.name()));
-		} catch (UnsupportedEncodingException e) {
-			return null;
-		}
+	public void write(String body) throws UnsupportedEncodingException {
+		this.body = body.getBytes(StandardCharsets.UTF_8.name());
 	}
 	
-	/**
-	 * 
-	 * @param status
-	 * @return
-	 */
-	public static Response getInstance(Status status) {
-		return new Response(status, new byte[0]);
-	}
-	
-	/**
-	 * 
-	 * @param url
-	 * @return
-	 * @throws IOException
-	 */
-	public static Response getInstance(File url) throws IOException {
+	public void write(File url) throws IOException {
 		Path path = url.toPath();
 		
-		return new Response(Status.OK, Files.readAllBytes(path))
-			.setResponseHeader("Content-type", Files.probeContentType(path));
+		write(Files.readAllBytes(path));
+		
+		setHeader("Content-type", Files.probeContentType(path));
 	}
 	
-	public Response setResponseHeader(String name, String value) {
+	public byte [] read() {
+		return this.body;
+	}
+	
+	public Response setHeader(String name, String value) {
 		this.header.put(name, value);
 		
 		return this;
 	}
 	
 	public ByteBuffer build() throws IOException {
-		if (this.startLine == null || this.body == null) {
-			throw new IOException("malformed http request!");
-		}
-		
 		StringBuilder sb = new StringBuilder();
 		Iterator<String> iterator;		
 		String key;
 		byte [] header;
 		byte [] message;
 		
-		sb.append(this.startLine);
+		sb.append(String.format("HTTP/1.1 %d %s" +CRLF, this.status.getCode(), this.status.getText()));
 		sb.append(String.format(FIELD, "Content-Length", String.valueOf(this.body.length)));
 		
 		iterator = this.header.keySet().iterator();
@@ -145,4 +124,7 @@ public class Response {
 		return ByteBuffer.wrap(message);
 	}
 	
+	public static void main(String [] args) {
+		System.out.println("".getBytes());
+	}
 }

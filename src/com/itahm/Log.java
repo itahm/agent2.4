@@ -4,12 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
-import java.util.HashSet;
-import java.util.Set;
 
 import com.itahm.json.JSONObject;
-import com.itahm.http.Request;
-import com.itahm.http.Response;
 import com.itahm.util.Util;
 
 public class Log {
@@ -21,7 +17,6 @@ public class Log {
 	public final static String SHUTDOWN = "shutdown";
 	public final static String CRITICAL = "critical";
 	
-	private final Set<Request> waiter = new HashSet<Request> ();
 	private LogFile dailyFile;
 	private SysLogFile sysLog;
 	
@@ -47,61 +42,10 @@ public class Log {
 	}
 	
 	public void write(JSONObject log) {
-		log.put("date", Calendar.getInstance().getTimeInMillis());
-		
 		try {
-			this.dailyFile.write(log);
+			this.dailyFile.write(log.put("date", Calendar.getInstance().getTimeInMillis()));
 		} catch (IOException ioe) {
 			sysLog(Util.EToString(ioe));
-		}
-		
-		synchronized(this.waiter) {
-			Response response = Response.getInstance(Response.Status.OK, log.toString());
-			
-			for (Request request : this.waiter) {
-				try {
-					HTTPServer.sendResponse(request, response);
-				} catch (IOException ioe) {
-					sysLog(Util.EToString(ioe));
-				}
-			}
-			
-			waiter.clear();
-		}
-	}
-	
-	public void write(String ip, String message, String type, boolean status, boolean broadcast) {
-		JSONObject logData = new JSONObject();
-		
-		logData
-			.put("ip", ip)
-			.put("type", type)
-			.put("status", status)
-			.put("message", message)
-			.put("date", Calendar.getInstance().getTimeInMillis());
-			
-		try {
-			this.dailyFile.write(logData);
-		} catch (IOException ioe) {
-			sysLog(Util.EToString(ioe));
-		}
-		
-		synchronized(this.waiter) {
-			Response response = Response.getInstance(Response.Status.OK, logData.toString());
-			
-			for (Request request : this.waiter) {
-				try {
-					HTTPServer.sendResponse(request, response);
-				} catch (IOException ioe) {
-					sysLog(Util.EToString(ioe));
-				}
-			}
-			
-			waiter.clear();
-		}
-		
-		if(broadcast) {
-			Agent.sendEvent(message);
 		}
 	}
 	
@@ -140,31 +84,6 @@ public class Log {
 		}
 		
 		return jsono.toString();
-	}
-	
-	/**
-	 * waiter가 원하는 이벤트 있으면 돌려주고 없으면 waiter 큐에 추가  
-	 * @param waiter
-	 * @throws IOException 
-	 */
-	public void listen(Request request, long l) throws IOException {
-		String index = Long.toString(l);
-		JSONObject log = this.dailyFile.getLog(index);
-		
-		if (log == null) {
-			synchronized(this.waiter) {
-				this.waiter.add(request);
-			}
-		}
-		else {
-			HTTPServer.sendResponse(request, Response.getInstance(Response.Status.OK, log.toString()));
-		}
-	}
-	
-	public void cancel(Request request) {
-		synchronized(this.waiter) {
-			this.waiter.remove(request);
-		}
 	}
 	
 }

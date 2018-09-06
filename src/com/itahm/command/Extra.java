@@ -7,94 +7,84 @@ import java.util.Iterator;
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 import com.itahm.Agent;
-import com.itahm.http.Request;
 import com.itahm.http.Response;
 import com.itahm.util.Network;
 
-public class Extra implements Command {
+public class Extra extends Command {
 	
 	private static final int DEF_TOP_CNT = 10;
 	
 	@Override
-	public Response execute(Request request, JSONObject data) throws IOException {
+	public void execute(JSONObject request, Response response) throws IOException {
 		
 		try {
-			switch(data.getString("extra")) {
+			switch(request.getString("extra")) {
 			case "reset":
-				Agent.resetResponse(data.getString("ip"));
+				Agent.resetResponse(request.getString("ip"));
 				
-				return Response.getInstance(Response.Status.OK);
+				break;
 			case "failure":
-				JSONObject json = Agent.getFailureRate(data.getString("ip"));
+				JSONObject data = Agent.getFailureRate(request.getString("ip"));
 				
-				if (json == null) {
-					return Response.getInstance(Response.Status.BADREQUEST,
-						new JSONObject().put("error", "node not found").toString());
+				if (data == null) {
+					response.setStatus(Response.Status.BADREQUEST);
+				}
+				else {
+					response.write(data.toString());
 				}
 				
-				return Response.getInstance(Response.Status.OK, json.toString());
+				break;
+				
 			case "search":
-				Network network = new Network(InetAddress.getByName(data.getString("network")).getAddress(), data.getInt("mask"));
+				Network network = new Network(InetAddress.getByName(request.getString("network")).getAddress(), request.getInt("mask"));
 				Iterator<String> it = network.iterator();
 				
 				while(it.hasNext()) {
 					Agent.testSNMPNode(it.next(), null);
 				}
 				
-				return Response.getInstance(Response.Status.OK);
-			case "message":
-				Agent.sendEvent(data.getString("message"));
+				break;
 				
-				return Response.getInstance(Response.Status.OK);
 			case "top":
-				return Response.getInstance(Response.Status.OK,
-					Agent.getTop(data.has("count")? data.getInt("count"): DEF_TOP_CNT).toString());
-			
+				response.write(Agent.getTop(request.has("count")? request.getInt("count"): DEF_TOP_CNT).toString());
+				
 			case "log":
-				return Response.getInstance(Response.Status.OK,
-					Agent.getLog(data.getLong("date")));
+				response.write(Agent.getLog(request.getLong("date")));
 			
 			case "syslog":
-				return Response.getInstance(Response.Status.OK,
-					new JSONObject().put("log", Agent.getSyslog(data.getLong("date"))).toString());
-			
+				response.write(new JSONObject().put("log", Agent.getSyslog(request.getLong("date"))).toString());
+				
 			case "report":
-				return Response.getInstance(Response.Status.OK,
-					Agent.report(data.getLong("start"), data.getLong("end")));
+				response.write(Agent.report(request.getLong("start"), request.getLong("end")));
 			
 			case "backup":
-				return Response.getInstance(Response.Status.OK,
-					Agent.backup().toString());
+				response.write(Agent.backup().toString());
 				
 			case "restore":
-				Agent.restore(data.getJSONObject("backup"));
+				Agent.restore(request.getJSONObject("backup"));
 				
-				return Response.getInstance(Response.Status.OK);
+				break;
 				
 			case "test":
-				return Response.getInstance(Response.Status.OK,
-					Agent.snmpTest().toString());
-			
-			case "critical":
-				Agent.setCritical(data.has("target")? data.getString("target"): null,
-					data.has("resource")? data.getString("resource"): null,
-					data.getInt("rate"),
-					data.getBoolean("overwrite"));
+				response.write(Agent.snmpTest().toString());
 				
-				return Response.getInstance(Response.Status.OK);
+			case "critical":
+				Agent.setCritical(request.has("target")? request.getString("target"): null,
+					request.has("resource")? request.getString("resource"): null,
+					request.getInt("rate"),
+					request.getBoolean("overwrite"));
+				
+				break;
 				
 			default:
-				return Response.getInstance(Response.Status.BADREQUEST,
-					new JSONObject().put("error", "invalid extra").toString());	
+				throw new JSONException("Extra not found.");
 			}
 		}
 		catch (JSONException jsone) {
-			return Response.getInstance(Response.Status.BADREQUEST,
-				new JSONObject().put("error", "invalid json request").toString());
+			response.setStatus(Response.Status.BADREQUEST);
 		}
 		catch (Exception e) {
-			return Response.getInstance(Response.Status.UNAVAILABLE,
-				new JSONObject().put("error", e.getMessage()).toString());
+			response.setStatus(Response.Status.SERVERERROR);
 		}
 	}
 

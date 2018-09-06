@@ -1,13 +1,10 @@
 package com.itahm.http;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -19,7 +16,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.Timer;
 
-public abstract class Listener extends Timer implements Runnable, Closeable {
+public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 	
 	private final static int BUF_SIZE = 2048;
 	
@@ -31,23 +28,23 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 	
 	private Boolean closed = false;
 	
-	public Listener() throws IOException {
+	public HTTPServer() throws IOException {
 		this("0.0.0.0", 80);
 	}  
 
-	public Listener(String ip) throws IOException {
+	public HTTPServer(String ip) throws IOException {
 		this(ip, 80);
 	}
 	
-	public Listener(int tcp) throws IOException {
+	public HTTPServer(int tcp) throws IOException {
 		this("0.0.0.0", tcp);
 	}
 	
-	public Listener(String ip, int tcp) throws IOException {
+	public HTTPServer(String ip, int tcp) throws IOException {
 		this(new InetSocketAddress(InetAddress.getByName(ip), tcp));
 	}
 	
-	public Listener(InetSocketAddress addr) throws IOException {
+	public HTTPServer(InetSocketAddress addr) throws IOException {
 		channel = ServerSocketChannel.open();
 		listener = channel.socket();
 		selector = Selector.open();
@@ -62,8 +59,6 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 		t.setName("ITAhM HTTP Listener");
 		
 		t.start();
-		
-		onStart();
 	}
 	
 	private void onConnect() throws IOException {
@@ -110,8 +105,6 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 		request.close();
 		
 		connections.remove(request);
-		
-		onClose(request);
 	}
 	
 	public int getConnectionSize() {
@@ -176,13 +169,13 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 							onRead(key);
 						}
 						catch (IOException ioe) {
+							ioe.printStackTrace();
+							
 							try {
 								closeRequest((Request)key.attachment());
 							} catch (IOException ioe2) {
 								ioe2.printStackTrace();
 							}
-							
-							onException(ioe);
 						}
 					}
 				}
@@ -202,77 +195,43 @@ public abstract class Listener extends Timer implements Runnable, Closeable {
 		}
 	}
 	
-	abstract protected void onStart();
-	abstract protected void onRequest(Request request)  throws IOException;
-	abstract protected void onClose(Request request);
-	abstract protected void onException(Exception e);
 	
-	public void doPost(Request request, Response response) {
+	public void onRequest(Request request) throws IOException {
+		Response response = new Response();
+		
+		if (!"HTTP/1.1".equals(request.getRequestVersion())) {
+			response.setStatus(Response.Status.VERSIONNOTSUP);
+		}
+		else {			
+			switch(request.getRequestMethod().toLowerCase()) {
+			case "head":
+				response = new Response();
+				
+				break;
+				
+			case "get":
+				response = new Response();
+				
+				doGet(request, response);
+				
+				break;
+				
+			case "post":
+				response = new Response();
+				
+				doPost(request, response);
+				
+				break;
+				
+			default:
+				response.setStatus(Response.Status.NOTALLOWED);
+				response.setHeader("Allow", "GET HEAD POST");
+			}
+		}
+		
+		request.sendResponse(response);
 	}
 	
-	public static void main(String [] args) throws IOException, InterruptedException {
-		final Listener server = new Listener(20114) {
-
-			@Override
-			protected void onRequest(Request request) {
-				
-				String uri = request.getRequestURI();
-				String method = request.getRequestMethod();
-				Response response;
-				
-				if (!"HTTP/1.1".equals(request.getRequestVersion())) {
-					response = Response.getInstance(Response.Status.VERSIONNOTSUP);
-				}
-				else {
-					if (method.toLowerCase().equals("get")) {
-						if ("/".equals(uri)) {
-							uri = "/index.html";
-						}
-						
-						try {
-							response = Response.getInstance(new File("."+ uri));
-							if (response == null) {
-								throw new IOException();
-							}
-						} catch (IOException e) {
-							response = Response.getInstance(Response.Status.NOTFOUND);
-						}
-					}
-					else {
-						response = Response.getInstance(Response.Status.NOTALLOWED);
-					}
-				}
-				
-				try {
-					request.sendResponse(response);
-				} catch (IOException e) {
-				}
-			}
-
-			@Override
-			protected void onClose(Request request) {
-			}
-
-			@Override
-			protected void onStart() {				
-			}
-
-			@Override
-			protected void onException(Exception e) {
-			}
-
-		};
-		
-		Socket s = new Socket("127.0.0.1", 20114);
-			
-			try (OutputStream os = s.getOutputStream()) {
-				s.setSoLinger(true, 0);
-			}
-		s.close();
-		
-		System.in.read();
-		
-		server.close();
-	}
-	
+	abstract protected void doPost(Request request, Response response);	
+	abstract protected void doGet(Request request, Response response);
 }

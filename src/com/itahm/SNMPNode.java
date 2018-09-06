@@ -138,14 +138,6 @@ public class SNMPNode extends Node {
 		}
 	}
 	
-	private void parseStorageEntry(Set<String> set) {
-		if (super.data.has("hrStorageEntry")) {
-			for (Object index : super.data.getJSONObject("hrStorageEntry").keySet()) {
-				set.add((String)index);
-			}
-		}
-	}
-	
 	private void parseStorage() throws IOException {
 		JSONObject storage;
 		TopTable.Value
@@ -155,19 +147,30 @@ public class SNMPNode extends Node {
 			capacity,
 			tmpValue;
 		int type;
-		Set<String> entry = new HashSet<>();
+		boolean modified = false;
+		Set<String> entry = null;
 		
-		parseStorageEntry(entry);
 		
-		for(String index: super.hrStorageEntry.keySet()) {
-			if (entry.contains(index)) {
-				entry.remove(index);
-			}
-			else {
-				// 추가된 index
-			}
+		if (super.data.has("hrStorageEntry")) {
+			entry = new HashSet<>();
 			
+			for (Object index : super.data.getJSONObject("hrStorageEntry").keySet()) {
+				entry.add((String)index);
+			}
+		}
+		
+		//TODO cme 발생
+		for(String index: super.hrStorageEntry.keySet()) {
 			storage = super.hrStorageEntry.get(index);
+			
+			if (entry != null) {
+				if (entry.contains(index)) {
+					entry.remove(index);
+				}
+				else {
+					modified = true;
+				}
+			}
 			
 			try {
 				capacity = storage.getInt("hrStorageSize");
@@ -197,6 +200,7 @@ public class SNMPNode extends Node {
 				this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.MEMORYRATE, new TopTable.Value(value, tmpValue *100 / capacity, index));
 				
 				break;
+			//case 5:
 			case 4:
 				// 스토리지는 여러 볼륨중 가장 높은값을 submit
 				if (this.critical != null) {
@@ -210,11 +214,23 @@ public class SNMPNode extends Node {
 				if (maxRate == null || maxRate.getRate() < (tmpValue *100L / capacity)) {
 					maxRate = new TopTable.Value(value, tmpValue *100L / capacity, index);
 				}
+				
+				break;
+				
+			//default:
 			}
 		}
 		
-		for (String index : entry) { // TODO 삭제된 index
-			System.out.println(index);
+		if (entry != null && entry.size() > 0) {
+			modified = true;
+		}
+		
+		if (modified) {
+		Agent.log(new JSONObject()
+				.put("origin", "warning")
+				.put("ip", this.ip)
+				.put("message", String.format("%s 저장소 상태 변화 감지", this.ip))
+				, false);
 		}
 		
 		if (max != null) {
@@ -277,6 +293,16 @@ public class SNMPNode extends Node {
 				continue;
 			}
 			
+			if (!data.has("timestamp") || !lastData.has("timestamp")) {
+				continue;
+			}
+				
+			duration = data.getLong("timestamp") - lastData.getLong("timestamp");
+			
+			if (duration <= 0) {
+				continue;
+			}
+				
 			if (data.has("ifInErrors") && lastData.has("ifInErrors")) {
 				long value = data.getInt("ifInErrors") - lastData.getInt("ifInErrors");
 				
@@ -300,12 +326,6 @@ public class SNMPNode extends Node {
 					maxErr = new TopTable.Value(value, -1, index);
 				}
 			}
-			
-			if (!data.has("timestamp") || !lastData.has("timestamp")) {
-				continue;
-			}
-				
-			duration = data.getLong("timestamp") - lastData.getLong("timestamp");
 			
 			iValue = -1;
 			
@@ -370,7 +390,7 @@ public class SNMPNode extends Node {
 					maxRate = new TopTable.Value(oValue, rate, index);
 				}
 			}
-			
+		
 			if (this.critical != null) {
 				long value = Math.max(iValue, oValue);
 				

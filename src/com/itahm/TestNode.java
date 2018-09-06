@@ -30,8 +30,8 @@ public class TestNode extends TmpNode {
 	}
 
 	@Override
-	public void onSuccess(String profileName) {
-		if (!this.agent.registerNode(this.ip, profileName)) {
+	public void onSuccess(String profile) {
+		if (!this.agent.registerNode(this.ip, profile)) {
 			return;
 		}			
 		
@@ -64,7 +64,7 @@ public class TestNode extends TmpNode {
 				.put("id", this.id)
 				.put("protocol", "snmp")
 				.put("ip", super.ip)
-				.put("profile", profileName)
+				.put("profile", profile)
 				.put("shutdown", false)
 				.put("critical", false));
 		} catch (IOException ioe) {
@@ -77,7 +77,7 @@ public class TestNode extends TmpNode {
 			.put("ip", super.ip)
 			.put("test", true)
 			.put("protocol", "snmp")
-			.put("profile", profileName)
+			.put("profile", profile)
 			.put("message", String.format("%s SNMP 등록 성공", super.ip))
 			, false);
 	}

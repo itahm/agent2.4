@@ -5,63 +5,59 @@ import java.io.IOException;
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 import com.itahm.Agent;
-import com.itahm.http.Request;
 import com.itahm.http.Response;
 
-public class Config implements Command {
+public class Config extends Command {
 	
 	@Override
-	public Response execute(Request request, JSONObject data) throws IOException {
+	public void execute(JSONObject request, Response response) throws IOException {
 		try {
-			final String key = data.getString("key");
+			final String key = request.getString("key");
 			
 			switch(key) {
 			case "clean":
-				Agent.config(key, data.getInt("value"));
+				Agent.config(key, request.getInt("value"));
 				
 				Agent.clean();
 				
 				break;
 			
 			case "dashboard":
-				Agent.config(key, data.getJSONObject("value"));
+				Agent.config(key, request.getJSONObject("value"));
 				
 				break;
 			case "sms":
 			case "menu":
-				Agent.config(key, data.getBoolean("value"));
+				Agent.config(key, request.getBoolean("value"));
 				
 				break;
 			case "interval":
-				Agent.setRollingInterval(data.getInt("value"));
+				Agent.setRollingInterval(request.getInt("value"));
 				
 				break;
 				
 			case "top":
-				Agent.config(key, data.getInt("value"));
+				Agent.config(key, request.getInt("value"));
 			
 				break;
 			case "iftype":
-				Agent.setValidIFType(data.getString("value"));
+				Agent.setValidIFType(request.getString("value"));
 				
 				break;
 			case "requestTimer":
-				Agent.setInterval(data.getLong("value"));
+				Agent.setInterval(request.getLong("value"));
 				
 				break;
 			case "health":
-				Agent.setHealth(data.getInt("value"));
+				Agent.setHealth(request.getInt("value"));
 				
 				break;
 			default:
-				Agent.config(key, data.getString("value"));
+				Agent.config(key, request.getString("value"));
 			}
-			
-			return Response.getInstance(Response.Status.OK);
 		}
 		catch (JSONException jsone) {
-			return Response.getInstance(Response.Status.BADREQUEST,
-				new JSONObject().put("error", "invalid json request").toString());
+			response.setStatus(Response.Status.BADREQUEST);
 		}
 	}
 	

@@ -7,29 +7,24 @@ import com.itahm.json.JSONObject;
 
 import com.itahm.Agent;
 import com.itahm.table.Table;
-import com.itahm.http.Request;
 import com.itahm.http.Response;
 
-public class Push implements Command {
+public class Push extends Command {
 	
 	@Override
-	public Response execute(Request request, JSONObject data) throws IOException {
+	public void execute(JSONObject request, Response response) throws IOException {
 		try {
-			Table table = Agent.getTable(data.getString("database"));
+			Table table = Agent.getTable(request.getString("database"));
 			
 			if (table == null) {
-				return Response.getInstance(Response.Status.BADREQUEST,
-					new JSONObject().put("error", "database not found").toString());
+				throw new JSONException("Database not found.");
 			}
 			else {
-				table.save(data.getJSONObject("data"));
-				
-				return Response.getInstance(Response.Status.OK);
+				table.save(request.getJSONObject("data"));
 			}
 		}
 		catch (JSONException jsone) {
-			return Response.getInstance(Response.Status.BADREQUEST,
-				new JSONObject().put("error", "invalid json request").toString());
+			response.setStatus(Response.Status.BADREQUEST);
 		}
 	}
 	

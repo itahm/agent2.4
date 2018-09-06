@@ -4,29 +4,21 @@ import java.io.File;
 import java.io.IOException;
 import java.net.NetworkInterface;
 import java.net.SocketException;
-import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.TreeSet;
 
 import com.itahm.Log;
 import com.itahm.SNMPAgent;
 import com.itahm.ICMPAgent;
-import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
+import com.itahm.http.HTTPListener;
 import com.itahm.command.Command;
-import com.itahm.command.Commander;
-import com.itahm.http.HTTPException;
-import com.itahm.http.Request;
 import com.itahm.http.Response;
-import com.itahm.http.Session;
 import com.itahm.table.Account;
 import com.itahm.table.Config;
 import com.itahm.table.Critical;
@@ -37,15 +29,6 @@ import com.itahm.table.Table;
 
 public class Agent {
 
-	/* Configuration */
-	
-	// true: itahm.com의 요청만 처리함
-	public static boolean isOnline = false;
-	// node 제한 0: 무제한
-	private static int limit = 0;
-	private static long expire = 0;
-	/* Configuration */
-	
 	public final static String VERSION = "2.0.3.4";
 	private final static String DATA = "data";
 	
@@ -54,17 +37,15 @@ public class Agent {
 	private static Log log;
 	private static SNMPAgent snmp;
 	private static ICMPAgent icmp;
-	private final HTTPServer server;
 	private static JSONObject config;
 	private static Batch batch;
 	public static File root;
 	private static File dataRoot;
+	private static HTTPListener listener = null;
+	private static int limit = 0;
+	private static long expire = 0;
 	
-	public Agent(File path, int tcp, long lExpire, int iLimit) throws IOException {
-		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
-		
-		expire = lExpire;
-		limit = iLimit;
+	public static void initialize(File path) throws IOException {
 		root = path;
 		dataRoot = new File(root, DATA);
 		
@@ -85,47 +66,67 @@ public class Agent {
 		}
 		
 		log = new Log(dataRoot);
-		
-		initialize();
-		
 		batch = new Batch(dataRoot);
 		
-		server = new HTTPServer(this, tcp);
+		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
 	}
 	
-	private static void initialize() throws IOException {
+	public static void setLimit(int i) {
+		limit = i;
+	}
+	
+	public static void setExpire(long l) {
+		expire = l;
+	}
+	
+	public static void setListener(HTTPListener httpl) {
+		listener = httpl;
+	}
+	
+	public static void start() throws IOException {
+		snmp = new SNMPAgent(dataRoot, limit);
+		
 		try {
-			long interval = 10000;
-			int timeout = 10000,
-				retry = 1,
-				rollingInterval = 1;
+			icmp = new ICMPAgent();
+		} catch (IOException e) {
+			snmp.close();
 			
-			if (config.has("health")) {
-				int health = config.getInt("health");
-
-				timeout = Byte.toUnsignedInt((byte)(health & 0x0f)) *1000;
-				retry = Byte.toUnsignedInt((byte)((health >>= 4)& 0x0f));
-			}
-			
-			if (config.has("requestTimer")) {
-				interval = config.getLong("requestTimer");
-			}
-			
-			if (config.has("interval")) {
-				rollingInterval = config.getInt("interval");
-			}
-			
-			snmp = new SNMPAgent(dataRoot, timeout, retry, interval, rollingInterval);
-			
-			icmp = new ICMPAgent(timeout, retry, interval);
-		} catch (IOException ioe) {
-			close();
-			
-			throw ioe;
+			throw e;
 		}
+		
+		if (config.has("health")) {
+			int health = config.getInt("health");
+			int timeout = Byte.toUnsignedInt((byte)(health & 0x0f)) *1000;
+			int retry = Byte.toUnsignedInt((byte)((health >>= 4)& 0x0f));
+			
+			snmp.setHealth(timeout, retry);
+			icmp.setHealth(timeout, retry);
+		}
+		
+		if (config.has("requestTimer")) {
+			long interval = config.getLong("requestTimer");
+			
+			snmp.setInterval(interval);
+			icmp.setInterval(interval);
+		}
+		
+		if (config.has("interval")) {
+			snmp.setRollingInterval(config.getInt("interval"));
+		}
+		
+		try {
+			snmp.start();
+		} catch (IOException e) {
+			snmp.close();
+			icmp.close();
+			
+			throw e;
+		}
+		
+		icmp.start();
 	}
 	
-	private Session signIn(JSONObject data) {
+	public static boolean signIn(JSONObject data) {
 		String username = data.getString("username");
 		String password = data.getString("password");
 		JSONObject accountData = getTable(Table.Name.ACCOUNT).getJSONObject();
@@ -134,39 +135,11 @@ public class Agent {
 			 JSONObject account = accountData.getJSONObject(username);
 			 
 			 if (account.getString("password").equals(password)) {
-				return Session.getInstance(new JSONObject()
-					.put("username", username)
-					.put("level", account.getInt("level")));
+				return true;
 			 }
 		}
 		
-		return null;
-	}
-
-	public static Session getSession(Request request) {
-		String cookie = request.getRequestHeader(Request.Header.COOKIE);
-		
-		if (cookie == null) {
-			return null;
-		}
-		
-		String [] cookies = cookie.split("; ");
-		String [] token;
-		Session session = null;
-		
-		for(int i=0, length=cookies.length; i<length; i++) {
-			token = cookies[i].split("=");
-			
-			if (token.length == 2 && "SESSION".equals(token[0])) {
-				session = Session.find(token[1]);
-				
-				if (session != null) {
-					session.update();
-				}
-			}
-		}
-		
-		return session;
+		return false;
 	}
 	
 	public static Table getTable(Table.Name name) {
@@ -200,10 +173,6 @@ public class Agent {
 		}
 		
 		return true;
-	}
-	
-	public static int getLimit() {
-		return limit;
 	}
 	
 	public static void setRollingInterval(int interval) {
@@ -266,24 +235,12 @@ public class Agent {
 		return validIFType.contains(type);
 	}
 	
-	// shutdown, system
-	public static void log(String ip, String message, Log.Type type, boolean status, boolean broadcast) {
-		log.write(ip, message, type.toString().toLowerCase(), status, broadcast);
-	}
-	
-	// critical
-	public static void log(JSONObject data, boolean broadcast) {		
-		log.write(data);
+	public static void log(JSONObject event, boolean broadcast) {		
+		log.write(event);
 		
-		if (broadcast) {
-			sendEvent(data);
+		if (listener != null) {
+			listener.sendEvent(event, broadcast);
 		}
-	}
-	
-	public static void sendEvent(String message) {
-	}
-	
-	public static void sendEvent(JSONObject message) {
 	}
 	
 	public static void syslog(String msg) {
@@ -302,7 +259,7 @@ public class Agent {
 		Table.Name name;
 		Table table;
 		
-		close();
+		stop();
 		
 		for (Object key : backup.keySet()) {
 			name = Table.Name.getName((String)key);
@@ -316,7 +273,7 @@ public class Agent {
 			}
 		}
 		
-		initialize();
+		start();
 	}
 	
 	public static long calcLoad() {
@@ -438,11 +395,7 @@ public class Agent {
 		return log.getSysLog(date);
 	}
 	
-	public static void listen(Request request, long index) throws IOException {
-		log.listen(request, index);
-	}
-	
-	public static void close() {
+	public static void stop() {
 		if (snmp != null) {
 			snmp.close();
 		}
@@ -452,71 +405,22 @@ public class Agent {
 		}
 	}
 	
-	public Response executeRequest(Request request, JSONObject data) {		
-		String cmd = data.getString("command");
-		Session session = getSession(request);
-		
-		if ("signin".equals(cmd)) {
-			if (session == null) {
-				try {
-					session = signIn(data);
-					
-					if (session == null) {
-						return Response.getInstance(Response.Status.UNAUTHORIZED);
-					}
-				} catch (JSONException jsone) {
-					return Response.getInstance(Response.Status.BADREQUEST
-						, new JSONObject().put("error", "invalid json request").toString());
-				}
-			}
-			
-			return Response.getInstance(Response.Status.OK, ((JSONObject)session.getExtras()).toString())
-				.setResponseHeader("Set-Cookie", String.format("SESSION=%s; HttpOnly", session.getCookie()));
-		}
-		else if ("signout".equals(cmd)) {
-			if (session != null) {
-				session.close();
-			}
-			
-			return Response.getInstance(Response.Status.OK);
-		}
-		
-		Command command = Commander.getCommand(cmd);
+	public static boolean request(JSONObject request, Response response) throws IOException {		
+		Command command = Command.valueOf(request.getString("command"));
 		
 		if (command == null) {
-			return Response.getInstance(Response.Status.BADREQUEST
-				, new JSONObject().put("error", "invalid command").toString());
+			return false;
 		}
 		
-		try {
-			if (session != null) {
-				return command.execute(request, data);
-			}
-		}
-		catch (IOException ioe) {
-			return Response.getInstance(Response.Status.UNAVAILABLE
-				, new JSONObject().put("error", ioe).toString());
-		}
-		catch (HTTPException httpe) {
-			return Response.getInstance(Response.Status.valueOf(httpe.getStatus()));
-		}
-			
-		return Response.getInstance(Response.Status.UNAUTHORIZED);
+		command.execute(request, response);
+		
+		return true;
 	}
-
-	public void closeRequest(Request request) {
-		log.cancel(request);
-	}
-
-	public void stop() {
-		close();
+	
+	public static void close() {
+		stop();
 		
 		batch.stop();
-		
-		try {
-			this.server.close();
-		} catch (IOException e) {
-		}
 		
 		System.out.println("ITAhM agent down.");
 	}
@@ -556,80 +460,6 @@ public class Agent {
 		}
 		
 		return false;
-	}
-	
-	public static void main(String[] args) throws IOException {
-		byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
-		long expire = 0; // 1546268400000L;
-		int limit = 0;
-		int tcp = 2014;
-		File root = null;
-		Timer timer = null;
-		
-		if (!isValidLicense(license)) {
-			System.out.println("Check your License[1].");
-			
-			return;
-		}
-		
-		for (int i=0, _i=args.length; i<_i; i++) {
-			if (args[i].indexOf("-") != 0) {
-				continue;
-			}
-			
-			switch(args[i].substring(1).toUpperCase()) {
-			case "PATH":
-				root = new File(args[++i]);
-				
-				break;
-			case "TCP":
-				try {
-					tcp = Integer.parseInt(args[++i]);
-				}
-				catch (NumberFormatException nfe) {}
-				
-				break;
-			}
-			
-		}
-		
-		if (root == null || !root.isDirectory()) {
-			try {
-				root = new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile();
-			} catch (URISyntaxException e) {
-				throw new IOException();
-			}
-		}
-		
-		if (expire > 0) {
-			if (Calendar.getInstance().getTimeInMillis() > expire) {
-				System.out.println("Check your License[2].");
-				
-				return;
-			}
-			else {
-				timer = new Timer(true);
-			}
-		}
-		
-		final Agent agent = new Agent(root, tcp, expire, limit);
-		
-		if (timer != null) {
-			timer.schedule(new TimerTask() {
-				
-				@Override
-				public void run() {
-					agent.stop();
-					
-					System.out.println("Check your License[3].");
-				}
-			}, new Date(expire));
-		}
-		
-		System.out.format("ITAhM Agent, since 2014.\n");
-		System.out.format("Directory : %s\n", root.getAbsoluteFile());
-		System.out.format("Agent loading...\n");
-		System.out.println("ITAhM agent has been successfully started.");
 	}
 	
 }

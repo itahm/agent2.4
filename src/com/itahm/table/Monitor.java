@@ -12,38 +12,44 @@ public class Monitor extends Table {
 		super(dataRoot, Name.MONITOR);
 	}
 	
-	private void remove(String ip, String protocol) throws IOException {
-		if ("snmp".equals(protocol)) {
-			if (Agent.removeSNMPNode(ip)) {
-				Agent.getTable(Name.CRITICAL).put(ip, null);
-			}
-		}
-		else if ("icmp".equals(protocol)) {
-			Agent.removeICMPNode(ip);
-		}
-		
-		super.put(ip, null);
-	}
-	
 	public JSONObject put(String ip, JSONObject monitor) throws IOException {
-		// icmp 에서 snmp로 또는 snmp 에서 icmp로 변경되는 상황
-		// 기존 모니터는 지워주자.
+		// 모니터를 icmp 에서 snmp로, snmp 에서 icmp로 변경되는 상황, 또는 모니터를 삭제하는 상황
+		// 어떤상황이든 기존 모니터가 있다면 일단 지워주자.
 		if (super.table.has(ip)) {
-			remove(ip, super.table.getJSONObject(ip).getString("protocol"));
+			switch(monitor.getString("protocol")) {
+			case "snmp":
+				if (Agent.removeSNMPNode(ip)) {
+					Agent.getTable(Name.CRITICAL).put(ip, null);
+				}
+				
+				break;
+				
+			case "icmp":
+				Agent.removeICMPNode(ip);
+				
+				break;
+			}
+			
+			super.put(ip, null);
 		}
 		
 		if (monitor != null) {
-			super.put(ip, null);
-			
-			switch(monitor.getString("protocol")) {
-			case "snmp":
-				Agent.testSNMPNode(ip, monitor.getString("id"));
-				
-				break;
-			case "icmp":
-				Agent.testICMPNode(ip);
-				
-				break;
+			// 테스트 결과인 경우
+			if (monitor.has("shutdown")) {
+				super.put(ip,  monitor);
+			}
+			// 테스트 요청인 경우
+			else {
+				switch(monitor.getString("protocol")) {
+				case "snmp":
+					Agent.testSNMPNode(ip, monitor.getString("id"));
+					
+					break;
+				case "icmp":
+					Agent.testICMPNode(ip);
+					
+					break;
+				}
 			}
 		}// else 위에서 처리 되었음.
 		
