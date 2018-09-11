@@ -24,7 +24,7 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 	private final ServerSocket listener;
 	private final Selector selector;
 	private final ByteBuffer buffer;
-	private final Set<Request> connections = new HashSet<Request>();
+	private final Set<Connection> connections = new HashSet<Connection>();
 	
 	private Boolean closed = false;
 	
@@ -63,16 +63,16 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 	
 	private void onConnect() throws IOException {
 		SocketChannel channel = null;
-		Request request;
+		Connection connection;
 		
 		try {
 			channel = this.channel.accept();
-			request = new Request(channel, this);
+			connection = new Connection(channel, this);
 			
 			channel.configureBlocking(false);
-			channel.register(this.selector, SelectionKey.OP_READ, request);
+			channel.register(this.selector, SelectionKey.OP_READ, connection);
 			
-			connections.add(request);
+			connections.add(connection);
 		} catch (IOException ioe) {
 			if (channel != null) {
 				channel.close();
@@ -84,7 +84,7 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 	
 	private void onRead(SelectionKey key) throws IOException {
 		SocketChannel channel = (SocketChannel)key.channel();
-		Request request = (Request)key.attachment();
+		Connection connection = (Connection)key.attachment();
 		int bytes = 0;
 		
 		this.buffer.clear();
@@ -92,19 +92,19 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 		bytes = channel.read(buffer);
 		
 		if (bytes == -1) {
-			closeRequest(request);
+			closeRequest(connection);
 		}
 		else if (bytes > 0) {
 			this.buffer.flip();
 				
-			request.parse(this.buffer);
+			connection.parse(this.buffer);
 		}
 	}
 
-	public void closeRequest(Request request) throws IOException {
-		request.close();
+	public void closeRequest(Connection connection) throws IOException {
+		connection.close();
 		
-		connections.remove(request);
+		connections.remove(connection);
 	}
 	
 	public int getConnectionSize() {
@@ -121,8 +121,8 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 			this.closed = true;
 		}
 		
-		for (Request request : connections) {
-			request.close();
+		for (Connection connection : connections) {
+			connection.close();
 		}
 			
 		connections.clear();
@@ -172,7 +172,7 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 							ioe.printStackTrace();
 							
 							try {
-								closeRequest((Request)key.attachment());
+								closeRequest((Connection)key.attachment());
 							} catch (IOException ioe2) {
 								ioe2.printStackTrace();
 							}
@@ -195,43 +195,6 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 		}
 	}
 	
-	
-	public void onRequest(Request request) throws IOException {
-		Response response = new Response();
-		
-		if (!"HTTP/1.1".equals(request.getRequestVersion())) {
-			response.setStatus(Response.Status.VERSIONNOTSUP);
-		}
-		else {			
-			switch(request.getRequestMethod().toLowerCase()) {
-			case "head":
-				response = new Response();
-				
-				break;
-				
-			case "get":
-				response = new Response();
-				
-				doGet(request, response);
-				
-				break;
-				
-			case "post":
-				response = new Response();
-				
-				doPost(request, response);
-				
-				break;
-				
-			default:
-				response.setStatus(Response.Status.NOTALLOWED);
-				response.setHeader("Allow", "GET HEAD POST");
-			}
-		}
-		
-		request.sendResponse(response);
-	}
-	
-	abstract protected void doPost(Request request, Response response);	
-	abstract protected void doGet(Request request, Response response);
+	abstract public void doPost(Request connection, Response response);	
+	abstract public void doGet(Request connection, Response response);
 }

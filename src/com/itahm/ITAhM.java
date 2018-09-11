@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import com.itahm.http.HTTPListener;
 import com.itahm.http.HTTPServer;
 import com.itahm.http.Request;
+import com.itahm.http.Connection;
 import com.itahm.http.Response;
 import com.itahm.http.Session;
 import com.itahm.json.JSONException;
@@ -76,7 +77,7 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 	}
 	
 	@Override
-	protected void doGet(Request request, Response response) {
+	public void doGet(Request request, Response response) {
 		String uri = request.getRequestURI();
 		File file = new File(Agent.root, uri);
 		
@@ -93,8 +94,8 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 	}
 	
 	@Override
-	protected void doPost(Request request, Response response) {
-		String origin = request.getHeader(Request.Header.ORIGIN);
+	public void doPost(Request request, Response response) {
+		String origin = request.getHeader(Connection.Header.ORIGIN.toString());
 		
 		if (origin != null) {
 			response.setHeader("Access-Control-Allow-Origin", origin);
@@ -110,43 +111,69 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 				throw new JSONException("Command not found.");
 			}
 			
+			Session session = request.getSession(false);
+			
 			switch (data.getString("command").toLowerCase()) {
 			case "signin":
-				Session session = request.getSession();
+				JSONObject account = null;
 				
 				if (session == null) {
-					if (Agent.signIn(data)) {
-						
+					account = Agent.signIn(data);
+					
+					if (account == null) {
+						response.setStatus(Response.Status.UNAUTHORIZED);
 					}
+					else {
+						session = request.getSession();
+					
+						session.setAttribute("account", account);
+						session.setMaxInactiveInterval(60 * 60);
+					}
+				}
+				else {
+					account = (JSONObject)session.getAttribute("account");
+				}
+				
+				if (account != null) {
+					response.write(account.toString());
 				}
 				
 				break;
 				
 			case "signout":
-				break;
-				
-			case "listen":
-				synchronized(this) {
-					try {
-						wait();
-					} catch (InterruptedException ie) {
-					}
-					
-					response.write(event);
+				if (session != null) {
+					session.invalidate();
 				}
 				
 				break;
 				
+			case "listen":
+				if (session == null) {
+					response.setStatus(Response.Status.UNAUTHORIZED);
+				}
+				else {
+					synchronized(this) {
+						try {
+							wait();
+						} catch (InterruptedException ie) {
+						}
+						
+						response.write(event);
+					}
+				}
+				break;
+				
 			default:
-				if (Agent.request(data, response)) {
-					throw new JSONException("");
-				};
+				if (session == null) {
+					response.setStatus(Response.Status.UNAUTHORIZED);
+				}
+				else if (!Agent.request(data, response)) {
+					throw new JSONException("Command not found.");
+				}
 			}
 					
 		} catch (JSONException | UnsupportedEncodingException e) {
 			response.setStatus(Response.Status.BADREQUEST);
-			
-			e.printStackTrace();
 		} catch (IOException ioe) {
 			response.setStatus(Response.Status.SERVERERROR);
 		}

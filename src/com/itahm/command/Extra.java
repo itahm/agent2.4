@@ -48,17 +48,27 @@ public class Extra extends Command {
 			case "top":
 				response.write(Agent.getTop(request.has("count")? request.getInt("count"): DEF_TOP_CNT).toString());
 				
+				break;
+				
 			case "log":
 				response.write(Agent.getLog(request.getLong("date")));
-			
+				
+				break;
+				
 			case "syslog":
 				response.write(new JSONObject().put("log", Agent.getSyslog(request.getLong("date"))).toString());
+				
+				break;
 				
 			case "report":
 				response.write(Agent.report(request.getLong("start"), request.getLong("end")));
 			
+				break;
+				
 			case "backup":
 				response.write(Agent.backup().toString());
+				
+				break;
 				
 			case "restore":
 				Agent.restore(request.getJSONObject("backup"));
@@ -67,6 +77,8 @@ public class Extra extends Command {
 				
 			case "test":
 				response.write(Agent.snmpTest().toString());
+				
+				break;
 				
 			case "critical":
 				Agent.setCritical(request.has("target")? request.getString("target"): null,
@@ -81,7 +93,7 @@ public class Extra extends Command {
 			}
 		}
 		catch (JSONException jsone) {
-			response.setStatus(Response.Status.BADREQUEST);
+			response.setStatus(Response.Status.BADREQUEST);jsone.printStackTrace();
 		}
 		catch (Exception e) {
 			response.setStatus(Response.Status.SERVERERROR);

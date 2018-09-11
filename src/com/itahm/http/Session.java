@@ -1,5 +1,6 @@
 package com.itahm.http;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -11,62 +12,38 @@ public class Session {
 	private static final Map<String, Session> sessions = new ConcurrentHashMap<>();
 	private static final Timer timer = new Timer(true);
 	
-	private static long timeout = 30*60*1000;
-	//static long timeout = 60 * 1000;
-	
-	private final String cookie;
-	private final Object extras;
+	private final Map<String, Object> attribute = new HashMap<>();
+	private long timeout = 60*60*1000;
+	private final String id;
 	private TimerTask task;
 	
-	private Session() {
-		cookie = null;
-		this.extras = null;
-	}
-	
-	private Session(String uuid, Object extras) {
-		cookie = uuid;
-		this.extras = extras;
+	public Session() {
+		id = UUID.randomUUID().toString();
+		
+		sessions.put(id, this);
 		
 		update();
-	}
-	
-	public static Session getInstance(Object extras) {
-		String uuid = UUID.randomUUID().toString();
-		Session session = new Session(uuid, extras);
-		
-		sessions.put(uuid, session);
-		
-		return session;
-	}
-	
-	public static Session getInstance() {
-		
-		return new Session();
 	}
 	
 	public static int count() {
 		return sessions.size();
 	}
 	
-	public static Session find(String cookie) {
-		return sessions.get(cookie);
+	public static Session find(String id) {
+		return sessions.get(id);
 	}
 	
-	public static void setTimeout(long newTimeout) {
-		timeout = newTimeout;
-	}
-	
-	public String getCookie() {
-		return this.cookie;
-	}
-	
-	public Object getExtras() {
-		return this.extras;
-	}
-	
-	public void update() {
-		final String cookie = this.cookie;
+	public void setMaxInactiveInterval(long timeout) {
+		this.timeout = timeout * 1000;
 		
+		update();
+	}
+	
+	public String getId() {
+		return this.id;
+	}
+	
+	public Session update() {
 		if (this.task != null) {
 			this.task.cancel();
 		}
@@ -75,17 +52,27 @@ public class Session {
 
 			@Override
 			public void run() {
-				sessions.remove(cookie);
+				sessions.remove(id);
 			}
 		};
 		
 		timer.schedule(this.task, timeout);
+		
+		return this;
 	}
 	
-	public void close() {
+	public void setAttribute(String name, Object value) {
+		this.attribute.put(name, value);
+	}
+	
+	public Object getAttribute(String name) {
+		return this.attribute.get(name);
+	}
+	
+	public void invalidate() {
 		this.task.cancel();
 		
-		sessions.remove(cookie);
+		sessions.remove(id);
 	}
 	
 }

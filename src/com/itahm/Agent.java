@@ -126,7 +126,7 @@ public class Agent {
 		icmp.start();
 	}
 	
-	public static boolean signIn(JSONObject data) {
+	public static JSONObject signIn(JSONObject data) {
 		String username = data.getString("username");
 		String password = data.getString("password");
 		JSONObject accountData = getTable(Table.Name.ACCOUNT).getJSONObject();
@@ -135,11 +135,11 @@ public class Agent {
 			 JSONObject account = accountData.getJSONObject(username);
 			 
 			 if (account.getString("password").equals(password)) {
-				return true;
+				return account;
 			 }
 		}
 		
-		return false;
+		return null;
 	}
 	
 	public static Table getTable(Table.Name name) {
