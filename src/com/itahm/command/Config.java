@@ -16,9 +16,7 @@ public class Config extends Command {
 			
 			switch(key) {
 			case "clean":
-				Agent.config(key, request.getInt("value"));
-				
-				Agent.clean();
+				Agent.setClean(request.getInt("value"));
 				
 				break;
 			

@@ -10,40 +10,35 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import com.itahm.json.JSONObject;
+import com.itahm.util.DataCleaner;
 
 public class Batch {
+
 	private final static int QUEUE_SIZE = 24;
 	private final static long MINUTE1 = 60 *1000;
 	private final static long MINUTE10 = MINUTE1 *10;
-	private final static long HOUR1 = MINUTE1 *60;
-	private final static long DAY1 = 24 * HOUR1;
 	
-	private final Timer timer = new Timer();;
+	private final File dataRoot;
+	private final Timer timer = new Timer();
+	private DataCleaner cleaner;
 	
 	public long lastDiskUsage = 0;
 	public JSONObject load = new JSONObject();
 	
-	public Batch(final File dataRoot) {
-		System.out.println("Batch scheduling...");
-		
-		scheduleDiskMonitor(dataRoot);
-		System.out.println("Free space monitor up.");
-		
-		scheduleUsageMonitor(new File(dataRoot, "node"));
-		System.out.println("Disk usage monitor up.");
-		
-		scheduleLoadMonitor();
-		System.out.println("Server load monitor up.");
-		
-		scheduleDiskCleaner();
-		System.out.println("Disk cleaner up.");
+	public Batch(File root) {
+		dataRoot = root;
 	}
 	
 	public void stop() {
 		this.timer.cancel();
+		
+		if (this.cleaner != null) {
+			this.cleaner.cancel();
+		}
 	}
 	
-	private final void scheduleUsageMonitor(final File nodeRoot) {
+	public final void scheduleUsageMonitor() {
+		File nodeRoot = new File(this.dataRoot, "node");
 		Calendar c = Calendar.getInstance();
 		
 		c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
@@ -97,30 +92,11 @@ public class Batch {
 				lastDiskUsage = size;
 			}
 		}, c.getTime(), 24 * 60 * 60 * 1000);
+		
+		System.out.println("Disk usage monitor up.");
 	}
 	
-	private final void scheduleDiskCleaner() {
-		Calendar c = Calendar.getInstance();
-		
-		c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
-		c.set(Calendar.HOUR_OF_DAY, 0);
-		c.set(Calendar.MINUTE, 0);
-		c.set(Calendar.SECOND, 0);
-		c.set(Calendar.MILLISECOND, 0);
-		
-		Agent.clean();
-		
-		this.timer.schedule(new TimerTask() {
-
-			@Override
-			public void run() {
-				Agent.clean();
-			}
-			
-		}, c.getTime(), DAY1);
-	}
-	
-	private final void scheduleDiskMonitor(final File root) {
+	public final void scheduleDiskMonitor() {
 		this.timer.schedule(new TimerTask() {
 			private final static long MAX = 100;
 			private final static long CRITICAL = 10;
@@ -130,22 +106,22 @@ public class Batch {
 			
 			@Override
 			public void run() {
-					freeSpace = MAX * root.getUsableSpace() / root.getTotalSpace();
-					
-					if (freeSpace < lastFreeSpace && freeSpace < CRITICAL) {
-						Agent.log(new JSONObject().
-							put("origin", "system").
-							put("message", String.format("저장소 여유공간이 %d%% 남았습니다.", freeSpace)), true);
-					}
-					
-					lastFreeSpace = freeSpace;
-					
+				freeSpace = MAX * dataRoot.getUsableSpace() / dataRoot.getTotalSpace();
+				
+				if (freeSpace < lastFreeSpace && freeSpace < CRITICAL) {
+					Agent.log(new JSONObject().
+						put("origin", "system").
+						put("message", String.format("저장소 여유공간이 %d%% 남았습니다.", freeSpace)), true);
+				}
+				
+				lastFreeSpace = freeSpace;
 			}
 		}, 0, MINUTE1);
+		
+		System.out.println("Free space monitor up.");
 	}
 
-	private final void scheduleLoadMonitor() {
-		
+	public final void scheduleLoadMonitor() {
 		this.timer.schedule(new TimerTask() {
 			private Long [] queue = new Long[QUEUE_SIZE];
 			private Map<Long, Long> map = new HashMap<>();
@@ -177,5 +153,49 @@ public class Batch {
 				}
 				
 			}}, MINUTE10, MINUTE10);
+		
+		System.out.println("Server load monitor up.");
 	}
+
+	public final void scheduleDiskCleaner(final long minDateMills, long delay) {
+		this.timer.schedule(new TimerTask() {
+
+			@Override
+			public void run() {
+				clean(minDateMills);
+			}
+			
+		}, delay);
+	}
+	
+	public void clean(final long minDateMills) {
+		if (this.cleaner != null) {
+			this.cleaner.cancel();
+		}
+		
+		this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), minDateMills, 3) {
+			
+			@Override
+			public void onDelete(File file) {
+			}
+
+			@Override
+			public void onComplete(long count) {
+				Calendar c = Calendar.getInstance();
+				
+				c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
+				c.set(Calendar.HOUR_OF_DAY, 0);
+				c.set(Calendar.MINUTE, 0);
+				c.set(Calendar.SECOND, 0);
+				c.set(Calendar.MILLISECOND, 0);
+				
+				scheduleDiskCleaner(minDateMills, c.getTimeInMillis());
+				
+				Agent.log(new JSONObject()
+					.put("origin", "system")
+					.put("message", String.format("파일 정리 %d 건.", count)), false);
+			}
+		};
+	}
+	
 }

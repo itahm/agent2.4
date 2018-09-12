@@ -1,11 +1,10 @@
 package com.itahm.util;
 
 import java.io.File;
-import java.util.Calendar;
 
 abstract public class DataCleaner implements Runnable{
 
-	private final long minDateMills;
+	private long minDateMills;
 	private File dataRoot;
 	private int depth;
 	private Thread thread;
@@ -16,12 +15,14 @@ abstract public class DataCleaner implements Runnable{
 	
 	public DataCleaner(File dataRoot, long minDateMills, int depth) {
 		this.dataRoot = dataRoot;
-		this.minDateMills = minDateMills;
 		this.depth = depth;
 		
-		thread = new Thread(this);
+		this.minDateMills = minDateMills;
 		
-		thread.start();
+		this.thread = new Thread(this);
+			
+		this.thread.setDaemon(true);
+		this.thread.start();
 	}
 
 	private long emptyLastData(File directory, int depth) {
@@ -39,7 +40,7 @@ abstract public class DataCleaner implements Runnable{
 				}
 				else {
 					try {
-						if (minDateMills > Long.parseLong(file.getName())) {
+						if (this.minDateMills > Long.parseLong(file.getName())) {
 							if (deleteDirectory(file)) {
 								count++;
 								
@@ -77,6 +78,7 @@ abstract public class DataCleaner implements Runnable{
 	abstract public void onDelete(File file);
 	abstract public void onComplete(long count);
 	
+	@Override
 	public void run() {
 		long count = -1;
 		
@@ -88,24 +90,9 @@ abstract public class DataCleaner implements Runnable{
 	}
 	
 	public void cancel() {
-		this.thread.interrupt();
+		if (this.thread != null) {
+			this.thread.interrupt();
+		}
 	}
 	
-	public static void main(String[] args) {
-		Calendar date = Calendar.getInstance();
-		
-		date.set(Calendar.MONTH, date.get(Calendar.MONTH) -1);
-		
-		new DataCleaner(new File("."), date.getTimeInMillis(), 1) {
-			
-			@Override
-			public void onDelete(File file) {
-			}
-			
-			@Override
-			public void onComplete(long count) {
-			}
-		};
-	}
-
 }

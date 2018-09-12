@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.UnknownHostException;
-import java.util.Calendar;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -32,14 +31,12 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 import com.itahm.snmp.TmpNode;
 import com.itahm.table.Device;
 import com.itahm.table.Table;
-import com.itahm.util.DataCleaner;
 import com.itahm.util.TopTable;
 import com.itahm.util.Util;
 
 public class SNMPAgent extends Snmp implements Closeable {
 	
 	private boolean isClosed = false;
-	private DataCleaner cleaner;
 	
 	public enum Resource {
 		RESPONSETIME("responseTime"),
@@ -635,29 +632,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		return this.topTable.getTop(count);		
 	}
 	
-	public void clean(int day) {
-		Calendar date = Calendar.getInstance();
-					
-		date.set(Calendar.HOUR_OF_DAY, 0);
-		date.set(Calendar.MINUTE, 0);
-		date.set(Calendar.SECOND, 0);
-		date.set(Calendar.MILLISECOND, 0);
-		
-		date.add(Calendar.DATE, -1* day);
-		
-		this.cleaner = new DataCleaner(nodeRoot, date.getTimeInMillis(), 3) {
-
-			@Override
-			public void onDelete(File file) {
-			}
-			
-			@Override
-			public void onComplete(long count) {
-				System.out.format("데이터 정리 %d 건 완료.", count);
-			}
-		};
-	}
-	
 	public JSONObject getFailureRate(String ip) {
 		SNMPNode node = this.nodeList.get(ip);
 		
@@ -951,10 +925,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		}
 		
 		this.timer.cancel();
-		
-		if (this.cleaner != null) {
-			this.cleaner.cancel();
-		}
 		
 		System.out.format("SNMP manager stop.\n");
 	}

@@ -68,6 +68,14 @@ public class Agent {
 		log = new Log(dataRoot);
 		batch = new Batch(dataRoot);
 		
+		batch.scheduleDiskMonitor();
+		batch.scheduleUsageMonitor();
+		batch.scheduleLoadMonitor();
+		
+		if (config.has("clean")) {
+			clean(config.getInt("clean"));
+		}
+		
 		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
 	}
 	
@@ -165,14 +173,23 @@ public class Agent {
 		return backup;
 	}
 	
-	public static boolean clean() {
-		int day = config.getInt("clean");
+	public static void clean(int period) {
+		Calendar c = Calendar.getInstance();
 		
-		if (day > 0) {
-			snmp.clean(day);
-		}
+		c.set(Calendar.HOUR_OF_DAY, 0);
+		c.set(Calendar.MINUTE, 0);
+		c.set(Calendar.SECOND, 0);
+		c.set(Calendar.MILLISECOND, 0);
 		
-		return true;
+		c.add(Calendar.DATE, -1 *period);
+		
+		batch.clean(c.getTimeInMillis());
+	}
+	
+	public static void setClean(int period) {
+		config("clean", period);
+		
+		clean(period);
 	}
 	
 	public static void setRollingInterval(int interval) {
@@ -460,6 +477,9 @@ public class Agent {
 		}
 		
 		return false;
+	}
+	
+	public static void main(String [] args) {
 	}
 	
 }
