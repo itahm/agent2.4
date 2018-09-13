@@ -20,7 +20,6 @@ import com.itahm.json.RollingFile;
 import com.itahm.snmp.Node;
 import com.itahm.snmp.RequestOID;
 import com.itahm.util.TopTable;
-import com.itahm.util.Util;
 
 public class SNMPNode extends Node {
 	
@@ -174,16 +173,15 @@ public class SNMPNode extends Node {
 			
 			try {
 				capacity = storage.getInt("hrStorageSize");
+				
+				if (capacity <= 0) {
+					continue;
+				}
+				
 				tmpValue = storage.getInt("hrStorageUsed");
 				value = 1L* tmpValue * storage.getInt("hrStorageAllocationUnits");
 				type = storage.getInt("hrStorageType");
 			} catch (JSONException jsone) {
-				Agent.syslog(Util.EToString(jsone));
-				
-				return;
-			}
-			
-			if (capacity <= 0) {
 				continue;
 			}
 			
@@ -461,7 +459,8 @@ public class SNMPNode extends Node {
 	
 	public JSONObject getData(String database, String index, long start, long end, boolean summary) {
 		try {
-			RollingFile rollingFile = this.rollingMap.get(Rolling.valueOf(database.toUpperCase())).get(index);
+			RollingFile rollingFile
+				= this.rollingMap.get(Rolling.valueOf(database.toUpperCase())).get(index);
 			
 			if (rollingFile == null) {
 				rollingFile = new RollingFile(new File(this.nodeRoot, database), index);
@@ -471,8 +470,10 @@ public class SNMPNode extends Node {
 				return rollingFile.getData(start, end, summary);
 			}
 		}
-		catch (IllegalArgumentException | IOException e) {
-			Agent.syslog(Util.EToString(e));
+		catch (IllegalArgumentException iae) {
+		}
+		catch (IOException ioe) {
+			ioe.printStackTrace();
 		}
 		
 		return null;
@@ -522,7 +523,7 @@ public class SNMPNode extends Node {
 				
 				parseInterface();
 			} catch (IOException ioe) {
-				Agent.syslog(Util.EToString(ioe));
+				ioe.printStackTrace();
 			}
 		}
 		
@@ -533,9 +534,7 @@ public class SNMPNode extends Node {
 
 	@Override
 	public void onException(Exception e) {
-		if (e != null) {
-			Agent.syslog(Util.EToString(e));
-		}
+		e.printStackTrace();
 		
 		this.agent.onException(this.ip);
 	}

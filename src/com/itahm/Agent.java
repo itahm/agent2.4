@@ -174,16 +174,24 @@ public class Agent {
 	}
 	
 	public static void clean(int period) {
-		Calendar c = Calendar.getInstance();
+		long minDateMills;
 		
-		c.set(Calendar.HOUR_OF_DAY, 0);
-		c.set(Calendar.MINUTE, 0);
-		c.set(Calendar.SECOND, 0);
-		c.set(Calendar.MILLISECOND, 0);
+		if (period <= 0) {
+			minDateMills = -1;
+		}else { 
+			Calendar c = Calendar.getInstance();
+			
+			c.set(Calendar.HOUR_OF_DAY, 0);
+			c.set(Calendar.MINUTE, 0);
+			c.set(Calendar.SECOND, 0);
+			c.set(Calendar.MILLISECOND, 0);
+			
+			c.add(Calendar.DATE, -1 *period);
+			
+			minDateMills = c.getTimeInMillis();
+		}
 		
-		c.add(Calendar.DATE, -1 *period);
-		
-		batch.clean(c.getTimeInMillis());
+		batch.clean(minDateMills);
 	}
 	
 	public static void setClean(int period) {
@@ -258,18 +266,6 @@ public class Agent {
 		if (listener != null) {
 			listener.sendEvent(event, broadcast);
 		}
-	}
-	
-	public static void syslog(String msg) {
-		Calendar c = Calendar.getInstance();
-	
-		log.sysLog(String.format("%04d-%02d-%02d %02d:%02d:%02d %s"
-			, c.get(Calendar.YEAR)
-			, c.get(Calendar.MONTH) +1
-			, c.get(Calendar.DAY_OF_MONTH)
-			, c.get(Calendar.HOUR_OF_DAY)
-			, c.get(Calendar.MINUTE)
-			, c.get(Calendar.SECOND), msg));
 	}
 	
 	public static void restore(JSONObject backup) throws Exception {
@@ -406,10 +402,6 @@ public class Agent {
 	
 	public static String getLog(long date) throws IOException {
 		return log.read(date);
-	}
-	
-	public static String getSyslog(long date) throws IOException {
-		return log.getSysLog(date);
 	}
 	
 	public static void stop() {

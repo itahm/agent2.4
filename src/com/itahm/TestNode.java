@@ -7,7 +7,6 @@ import com.itahm.snmp.Node;
 import com.itahm.snmp.TmpNode;
 import com.itahm.table.Device;
 import com.itahm.table.Table;
-import com.itahm.util.Util;
 
 public class TestNode extends TmpNode {
 
@@ -53,7 +52,7 @@ public class TestNode extends TmpNode {
 					break;
 				}
 			} catch (IOException ioe) {
-				Agent.syslog(Util.EToString(ioe));
+				ioe.printStackTrace();
 			}
 		}
 		
@@ -68,7 +67,7 @@ public class TestNode extends TmpNode {
 				.put("shutdown", false)
 				.put("critical", false));
 		} catch (IOException ioe) {
-			Agent.syslog(Util.EToString(ioe));
+			ioe.printStackTrace();
 		}
 		
 		Agent.log(new JSONObject()

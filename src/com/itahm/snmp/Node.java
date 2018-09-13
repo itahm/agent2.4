@@ -515,8 +515,8 @@ public abstract class Node implements Runnable, Closeable {
 				if (parseResponse(responseVB.getOid(), value, requestVB.getOid())) {
 					nextRequests.add(responseVB);
 				}
-			} catch(ClassCastException | JSONException e) { 
-				Agent.syslog(e.getMessage());
+			} catch(JSONException jsone) { 
+				jsone.printStackTrace();
 			}
 		}
 		

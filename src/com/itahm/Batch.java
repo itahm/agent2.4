@@ -4,6 +4,7 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
@@ -157,7 +158,7 @@ public class Batch {
 		System.out.println("Server load monitor up.");
 	}
 
-	public final void scheduleDiskCleaner(final long minDateMills, long delay) {
+	private final void scheduleDiskCleaner(final long minDateMills, Date time) {
 		this.timer.schedule(new TimerTask() {
 
 			@Override
@@ -165,7 +166,7 @@ public class Batch {
 				clean(minDateMills);
 			}
 			
-		}, delay);
+		}, time);
 	}
 	
 	public void clean(final long minDateMills) {
@@ -174,6 +175,7 @@ public class Batch {
 		}
 		
 		this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), minDateMills, 3) {
+			private final long start = System.currentTimeMillis();
 			
 			@Override
 			public void onDelete(File file) {
@@ -189,11 +191,11 @@ public class Batch {
 				c.set(Calendar.SECOND, 0);
 				c.set(Calendar.MILLISECOND, 0);
 				
-				scheduleDiskCleaner(minDateMills, c.getTimeInMillis());
+				scheduleDiskCleaner(minDateMills, c.getTime());
 				
 				Agent.log(new JSONObject()
 					.put("origin", "system")
-					.put("message", String.format("파일 정리 %d 건.", count)), false);
+					.put("message", String.format("파일 정리 %d 건, 소요시간 %d ms", count, System.currentTimeMillis() - this.start)), false);
 			}
 		};
 	}

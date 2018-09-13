@@ -55,11 +55,6 @@ public class Extra extends Command {
 				
 				break;
 				
-			case "syslog":
-				response.write(new JSONObject().put("log", Agent.getSyslog(request.getLong("date"))).toString());
-				
-				break;
-				
 			case "report":
 				response.write(Agent.report(request.getLong("start"), request.getLong("end")));
 			

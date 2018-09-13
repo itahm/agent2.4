@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 
 import com.itahm.json.JSONObject;
-import com.itahm.util.Util;
 
 public class Log {
 
@@ -18,7 +17,6 @@ public class Log {
 	public final static String CRITICAL = "critical";
 	
 	private LogFile dailyFile;
-	private SysLogFile sysLog;
 	
 	public Log(File root) throws IOException {
 		File logRoot = new File(root, "log");
@@ -28,32 +26,13 @@ public class Log {
 		systemRoot.mkdir();
 		
 		dailyFile = new LogFile(logRoot);
-		sysLog = new SysLogFile(systemRoot);
-	}
-	
-	public String getSysLog(long mills) throws IOException {
-		byte [] sysLog = this.sysLog.read(mills);
-		
-		if (sysLog == null) {
-			sysLog = new byte [0];
-		}
-		
-		return new String(sysLog, StandardCharsets.UTF_8.name());
 	}
 	
 	public void write(JSONObject log) {
 		try {
 			this.dailyFile.write(log.put("date", Calendar.getInstance().getTimeInMillis()));
 		} catch (IOException ioe) {
-			sysLog(Util.EToString(ioe));
-		}
-	}
-	
-	public void sysLog(String log) {
-		try {
-			this.sysLog.write((log + System.lineSeparator()).getBytes(StandardCharsets.UTF_8));
-		} catch (IOException e) {
-			e.printStackTrace();
+			ioe.printStackTrace();
 		}
 	}
 	

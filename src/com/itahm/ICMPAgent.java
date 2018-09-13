@@ -13,7 +13,6 @@ import com.itahm.json.JSONObject;
 import com.itahm.icmp.ICMPListener;
 import com.itahm.icmp.ICMPNode;
 import com.itahm.table.Table;
-import com.itahm.util.Util;
 
 public class ICMPAgent implements ICMPListener, Closeable {
 	
@@ -36,7 +35,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 					addNode((String)ip);
 				}
 			} catch (JSONException jsone) {
-				Agent.syslog(Util.EToString(jsone));
+				jsone.printStackTrace();
 			}
 		}
 	}
@@ -51,7 +50,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			
 			node.ping(0);
 		} catch (UnknownHostException uhe) {
-			Agent.syslog(Util.EToString(uhe));
+			uhe.printStackTrace();
 		}		
 	}
 	
@@ -69,7 +68,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		try {
 			node.close();
 		} catch (IOException ioe) {
-			Agent.syslog(Util.EToString(ioe));
+			ioe.printStackTrace();
 		}
 		
 		return true;
@@ -127,7 +126,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 					try {
 						monitorTable.save();
 					} catch (IOException ioe) {
-						Agent.syslog(Util.EToString(ioe));
+						ioe.printStackTrace();
 					}
 					
 					addNode(ip);
@@ -170,7 +169,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			try {
 				this.monitorTable.save();
 			} catch (IOException ioe) {
-				Agent.syslog(Util.EToString(ioe));
+				ioe.printStackTrace();
 			}
 			
 			Agent.log(new JSONObject()
@@ -197,7 +196,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			try {
 				this.monitorTable.save();
 			} catch (IOException ioe) {
-				Agent.syslog(Util.EToString(ioe));
+				ioe.printStackTrace();
 			}
 			
 			Agent.log(new JSONObject()
@@ -216,14 +215,12 @@ public class ICMPAgent implements ICMPListener, Closeable {
 	 */
 	@Override
 	public void close() {
-		Exception e = null;
-		
 		synchronized (this.nodeList) {
 			for (ICMPNode node : this.nodeList.values()) {
 				try {
 					node.close();
 				} catch (IOException ioe) {
-					e = ioe;
+					ioe.printStackTrace();
 				}
 			}
 		}
@@ -232,9 +229,6 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		
 		System.out.format("ICMP manager stop.\n");
 		
-		if (e != null) {
-			Agent.syslog(Util.EToString(e));
-		}
 	}
 	
 }
