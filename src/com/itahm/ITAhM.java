@@ -30,7 +30,7 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 		System.out.format("ITAhM HTTP Server started with TCP %d.\n", tcp);
 		
 		byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
-		long expire = 0; // 1546268400000L;
+		long expire = 1539702000000L; // 1546268400000L;
 		int limit = 0;
 		
 		if (!Agent.isValidLicense(license)) {

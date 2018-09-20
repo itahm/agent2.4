@@ -1,6 +1,7 @@
 package com.itahm;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Calendar;
@@ -22,6 +23,7 @@ public class Batch {
 	private final File dataRoot;
 	private final Timer timer = new Timer();
 	private DataCleaner cleaner;
+	private TimerTask schedule;
 	
 	public long lastDiskUsage = 0;
 	public JSONObject load = new JSONObject();
@@ -159,7 +161,7 @@ public class Batch {
 	}
 
 	private final void scheduleDiskCleaner(final long minDateMills, Date time) {
-		this.timer.schedule(new TimerTask() {
+		this.timer.schedule(this.schedule = new TimerTask() {
 
 			@Override
 			public void run() {
@@ -169,35 +171,57 @@ public class Batch {
 		}, time);
 	}
 	
-	public void clean(final long minDateMills) {
+	synchronized public void clean(final long minDateMills) {
+		if (this.schedule != null) {
+			this.schedule.cancel();
+		}
+		
 		if (this.cleaner != null) {
 			this.cleaner.cancel();
 		}
 		
-		this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), minDateMills, 3) {
-			private final long start = System.currentTimeMillis();
-			
-			@Override
-			public void onDelete(File file) {
-			}
+		try {
+			this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), minDateMills, 3) {
+				private final long start = System.currentTimeMillis();
+				
+				@Override
+				public void onDelete(File file) {
+				}
 
-			@Override
-			public void onComplete(long count) {
-				Calendar c = Calendar.getInstance();
-				
-				c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
-				c.set(Calendar.HOUR_OF_DAY, 0);
-				c.set(Calendar.MINUTE, 0);
-				c.set(Calendar.SECOND, 0);
-				c.set(Calendar.MILLISECOND, 0);
-				
-				scheduleDiskCleaner(minDateMills, c.getTime());
-				
-				Agent.log(new JSONObject()
-					.put("origin", "system")
-					.put("message", String.format("파일 정리 %d 건, 소요시간 %d ms", count, System.currentTimeMillis() - this.start)), false);
-			}
-		};
+				@Override
+				public void onComplete(long count) {
+					if (count < 0) {
+						Agent.log(new JSONObject()
+							.put("origin", "system")
+							.put("message", String.format("파일 정리 취소.")), false);
+					}
+					else {
+						Calendar c = Calendar.getInstance();
+						
+						c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
+						c.set(Calendar.HOUR_OF_DAY, 0);
+						c.set(Calendar.MINUTE, 0);
+						c.set(Calendar.SECOND, 0);
+						c.set(Calendar.MILLISECOND, 0);
+						
+						/*
+						c.set(Calendar.MINUTE, c.get(Calendar.MINUTE) +1);
+						c.set(Calendar.SECOND, 0);
+						c.set(Calendar.MILLISECOND, 0);
+						*/
+						scheduleDiskCleaner(minDateMills, c.getTime());
+						
+						Agent.log(new JSONObject()
+							.put("origin", "system")
+							.put("message", String.format("파일 정리 %d 건, 소요시간 %d ms", count, System.currentTimeMillis() - this.start)), false);
+					}
+				}
+			};
+		} catch (IOException e) {
+			Agent.log(new JSONObject()
+				.put("origin", "system")
+				.put("message", String.format("파일 정리 오류.")), false);
+		}
 	}
 	
 }

@@ -15,13 +15,12 @@ public class Select extends Command {
 		try {
 			JSONObject body = Agent.getNodeData(request.getString("ip"), request.has("offline"));
 			
-			if (body == null) {
-				throw new JSONException("Node not found.");
+			if (body != null) {
+				response.write(body.toString());
 			}
-			
-			response.write(body.toString());
+			// else node not found
 		}
-		catch (JSONException jsone) {
+		catch (JSONException jsone) {jsone.printStackTrace();
 			response.setStatus(Response.Status.BADREQUEST);
 		}
 	}

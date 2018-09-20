@@ -10,6 +10,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.itahm.TopTable.Resource;
 import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 
@@ -31,35 +32,11 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 import com.itahm.snmp.TmpNode;
 import com.itahm.table.Device;
 import com.itahm.table.Table;
-import com.itahm.util.TopTable;
 import com.itahm.util.Util;
 
 public class SNMPAgent extends Snmp implements Closeable {
 	
 	private boolean isClosed = false;
-	
-	public enum Resource {
-		RESPONSETIME("responseTime"),
-		FAILURERATE("failureRate"),
-		PROCESSOR("processor"),
-		MEMORY("memory"),
-		MEMORYRATE("memoryRate"),
-		STORAGE("storage"),
-		STORAGERATE("storageRate"),
-		THROUGHPUT("throughput"),
-		THROUGHPUTRATE("throughputRate"),
-		THROUGHPUTERR("throughputErr");
-		
-		private String string;
-		
-		private Resource(String string) {
-			this.string = string;
-		}
-		
-		public String toString() {
-			return this.string;
-		}
-	};
 	
 	public final File nodeRoot;
 	
@@ -68,7 +45,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 	private final Table monitorTable;
 	private final Table profileTable;
 	private final Table criticalTable;
-	private final TopTable<Resource> topTable;
+	private final TopTable topTable = new TopTable();
 	private final Timer timer;
 	
 	private long interval = 10000;
@@ -92,8 +69,6 @@ public class SNMPAgent extends Snmp implements Closeable {
 		profileTable = Agent.getTable(Table.Name.PROFILE);
 		
 		criticalTable = Agent.getTable(Table.Name.CRITICAL);
-		
-		topTable = new TopTable<>(Resource.class);
 		
 		timer = new Timer();
 		 
@@ -627,7 +602,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 	}
 	
 	public JSONObject getTop(int count) {
-		return this.topTable.getTop(count);		
+		return this.topTable.getTop(count);
 	}
 	
 	public JSONObject getFailureRate(String ip) {
@@ -664,25 +639,10 @@ public class SNMPAgent extends Snmp implements Closeable {
 	}
 	
 	/**
-	 * 
 	 * @param ip
-	 * @param timeout
-	 * ICMP가 성공하는 경우 후속 SNMP 결과에 따라 처리하도록 하지만
-	 * ICMP가 실패하는 경우는 바로 다음 Request를 처리하도록 해야한다.
+	 * @param success ICMP 성공 or 실패
 	 */
-	public void onTimeout(String ip, boolean timeout) {
-		if (timeout) {
-			onFailure(ip);
-		}
-		else {
-			onSuccess(ip);
-		}
-	}
-	
-	/**
-	 * ICMP 요청에 대한 응답
-	 */
-	private void onSuccess(String ip) {
+	public void onTimeout(String ip, boolean success) {
 		SNMPNode node = this.nodeList.get(ip);
 		
 		// 그 사이 삭제되었으면
@@ -696,72 +656,44 @@ public class SNMPAgent extends Snmp implements Closeable {
 			return;
 		}
 		
-		if (monitor.getBoolean("shutdown")) {
-			monitor.put("shutdown", false);
-			
-			try {
-				this.monitorTable.save();
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
+		if (success) {
+			if (monitor.getBoolean("shutdown")) {
+				monitor.put("shutdown", false);
+				
+				try {
+					this.monitorTable.save();
+				} catch (IOException ioe) {
+					ioe.printStackTrace();
+				}
+				
+				Agent.log(new JSONObject()
+					.put("origin", "shutdown")
+					.put("ip", ip)
+					.put("shutdown", false)
+					.put("protocol", "snmp")
+					.put("message", String.format("%s SNMP 응답 정상", ip)), true);
+			}
+		}
+		else {
+			if (!monitor.getBoolean("shutdown")) {
+				monitor.put("shutdown", true);
+				
+				try {
+					this.monitorTable.save();
+				} catch (IOException ioe) {
+					ioe.printStackTrace();
+				}
+				
+				Agent.log(new JSONObject()
+					.put("origin", "shutdown")
+					.put("ip", ip)
+					.put("shutdown", true)
+					.put("protocol", "snmp")
+					.put("message", String.format("%s SNMP 응답 없음", ip)), true);
 			}
 			
-			Agent.log(new JSONObject()
-				.put("origin", "shutdown")
-				.put("ip", ip)
-				.put("shutdown", false)
-				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP 응답 정상", ip)), true);
+			sendRequest(node);
 		}
-	}
-	
-	/**
-	 * ICMP 요청에 대한 응답
-	 */
-	private void onFailure(String ip) {
-		SNMPNode node = this.nodeList.get(ip);
-
-		if (node == null) {
-			return;
-		}
-		
-		JSONObject monitor = this.monitorTable.getJSONObject(ip);
-		
-		if (monitor == null) {
-			return;
-		}
-		
-		if (!monitor.getBoolean("shutdown")) {
-			monitor.put("shutdown", true);
-			
-			try {
-				this.monitorTable.save();
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
-			}
-			
-			Agent.log(new JSONObject()
-				.put("origin", "shutdown")
-				.put("ip", ip)
-				.put("shutdown", true)
-				.put("protocol", "snmp")
-				.put("message", String.format("%s SNMP 응답 없음", ip)), true);
-		}
-		
-		sendRequest(node);
-	}
-
-	/**
-	 * snmp 요청에 대한 응답
-	 * @param ip
-	 */
-	public void onException(String ip) {
-		SNMPNode node = this.nodeList.get(ip);
-
-		if (node == null) {
-			return;
-		}
-		
-		sendNextRequest(node);
 	}
 	
 	public void onCritical(String ip, String resource, String index, boolean isCritical, long rate, String description) {
@@ -843,7 +775,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			return;
 		}
 		
-		this.topTable.submit(ip, resource, value);
+		this.topTable.submit(resource, ip, value);
 	}
 	
 	private void sendNextRequest(final SNMPNode node) {

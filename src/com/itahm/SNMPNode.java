@@ -2,6 +2,7 @@ package com.itahm;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.Set;
 
 import org.snmp4j.PDU;
 import org.snmp4j.mp.SnmpConstants;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.Variable;
@@ -19,7 +21,6 @@ import com.itahm.json.JSONObject;
 import com.itahm.json.RollingFile;
 import com.itahm.snmp.Node;
 import com.itahm.snmp.RequestOID;
-import com.itahm.util.TopTable;
 
 public class SNMPNode extends Node {
 	
@@ -111,7 +112,7 @@ public class SNMPNode extends Node {
 	private void parseResponseTime() throws IOException {
 		this.putData(Rolling.RESPONSETIME, "0", super.responseTime);
 		
-		this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.RESPONSETIME, new TopTable.Value(responseTime, -1, "0"));
+		this.agent.onSubmitTop(this.ip, TopTable.Resource.RESPONSETIME, new TopTable.Value(responseTime, -1, "0"));
 	}
 	
 	private void parseProcessor() throws IOException {
@@ -133,7 +134,7 @@ public class SNMPNode extends Node {
 		}
 		
 		if (max != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.PROCESSOR, max);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.PROCESSOR, max);
 		}
 	}
 	
@@ -194,8 +195,8 @@ public class SNMPNode extends Node {
 					this.critical.analyze(Critical.Resource.MEMORY, index, capacity, tmpValue);
 				}
 				
-				this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.MEMORY, new TopTable.Value(value, tmpValue *100 / capacity, index));
-				this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.MEMORYRATE, new TopTable.Value(value, tmpValue *100 / capacity, index));
+				this.agent.onSubmitTop(this.ip, TopTable.Resource.MEMORY, new TopTable.Value(value, tmpValue *100 / capacity, index));
+				this.agent.onSubmitTop(this.ip, TopTable.Resource.MEMORYRATE, new TopTable.Value(value, tmpValue *100 / capacity, index));
 				
 				break;
 			//case 5:
@@ -224,7 +225,7 @@ public class SNMPNode extends Node {
 		}
 		
 		if (modified) {
-		Agent.log(new JSONObject()
+			Agent.log(new JSONObject()
 				.put("origin", "warning")
 				.put("ip", this.ip)
 				.put("message", String.format("%s 저장소 상태 변화 감지", this.ip))
@@ -232,11 +233,11 @@ public class SNMPNode extends Node {
 		}
 		
 		if (max != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.STORAGE, max);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.STORAGE, max);
 		}
 		
 		if (maxRate != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.STORAGERATE, maxRate);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.STORAGERATE, maxRate);
 		}
 	}
 	
@@ -399,15 +400,15 @@ public class SNMPNode extends Node {
 		}
 		
 		if (max != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.THROUGHPUT, max);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.THROUGHPUT, max);
 		}
 		
 		if (maxRate != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.THROUGHPUTRATE, maxRate);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.THROUGHPUTRATE, maxRate);
 		}
 		
 		if (maxErr != null) {
-			this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.THROUGHPUTERR, maxErr);
+			this.agent.onSubmitTop(this.ip, TopTable.Resource.THROUGHPUTERR, maxErr);
 		}
 	}
 	
@@ -511,6 +512,9 @@ public class SNMPNode extends Node {
 		return pdu;
 	}
 	
+	/**
+	 * snmp 응답
+	 */
 	@Override
 	protected void onResponse(boolean success) {
 		if (success) {
@@ -529,19 +533,21 @@ public class SNMPNode extends Node {
 		
 		this.agent.onResponse(this.ip, success);
 		
-		this.agent.onSubmitTop(this.ip, SNMPAgent.Resource.FAILURERATE, new TopTable.Value(this.getFailureRate(), this.getFailureRate(), "-1"));
+		this.agent.onSubmitTop(this.ip, TopTable.Resource.FAILURERATE, new TopTable.Value(this.getFailureRate(), this.getFailureRate(), "-1"));
 	}
 
+	/**
+	 * icmp 응답
+	 */
 	@Override
-	public void onException(Exception e) {
-		e.printStackTrace();
-		
-		this.agent.onException(this.ip);
-	}
-
-	@Override
-	protected void onTimeout(boolean timeout) {
-		this.agent.onTimeout(this.ip, timeout);
+	protected void onTimeout(boolean success) {
+		this.agent.onTimeout(this.ip, success);
 	}
 	
+	@Override
+	protected void onError(InetAddress address, int status) {
+		Agent.log(new JSONObject()
+			.put("origin", "system")
+			.put("message", String.format("Node %s reports error status %d.", address, status)), false);
+	}
 }

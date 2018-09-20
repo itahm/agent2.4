@@ -53,7 +53,9 @@ public class DailyFile {
 			return null;
 		}
 		
-		return Files.readAllBytes(f.toPath());
+		byte [] ba = Files.readAllBytes(f.toPath());
+		
+		return ba.length > 0? ba: null;
 	}
 	
 	public void write(byte [] data) throws IOException {

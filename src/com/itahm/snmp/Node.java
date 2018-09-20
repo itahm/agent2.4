@@ -159,7 +159,7 @@ public abstract class Node implements Runnable, Closeable {
 					if (ip.isReachable(this.timeout)) {
 						this.data.put("responseTime", this.responseTime = System.currentTimeMillis() - sent);
 						
-						onTimeout(false);
+						onTimeout(true);
 						
 						parseResponse(this.snmp.send(pdu, this.target));
 						
@@ -167,12 +167,14 @@ public abstract class Node implements Runnable, Closeable {
 					}
 				}
 				
-				onTimeout(true);
+				onTimeout(false);
 				
 			} catch (InterruptedException ie) {
 				break;
 			} catch (IOException ioe) {
-				onException(ioe);
+				ioe.printStackTrace();
+				
+				break;
 			}
 		}
 	}
@@ -542,7 +544,9 @@ public abstract class Node implements Runnable, Closeable {
 		int status = response.getErrorStatus();
 		
 		if (status != PDU.noError) {
-			throw new IOException(String.format("Node %s reports error status %d", this.target.getAddress(), status));
+			onError(this.ip, status);
+			
+			return;
 		}
 		
 		if (hasNextRequest(request, response)) {
@@ -575,9 +579,9 @@ public abstract class Node implements Runnable, Closeable {
 		}
 	}
 	
+	abstract protected void onError(InetAddress address, int status);
 	abstract protected void onResponse(boolean success);
-	abstract protected void onTimeout(boolean timeout);
-	abstract protected void onException(Exception e);
+	abstract protected void onTimeout(boolean success);
 	
 	public static void main(String [] args) throws IOException {
 	}
