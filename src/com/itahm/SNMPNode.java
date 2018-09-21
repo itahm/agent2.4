@@ -10,7 +10,6 @@ import java.util.Set;
 
 import org.snmp4j.PDU;
 import org.snmp4j.mp.SnmpConstants;
-import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.Variable;

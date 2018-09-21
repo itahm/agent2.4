@@ -78,7 +78,7 @@ public class TopTable implements Comparator<String> {
 			list.addAll(this.top.keySet());
 			Collections.sort(list, this);
 		
-			for (int i=0, _i= Math.min(list.size(), count); i<_i;) {
+			for (int i=0, _i= list.size(), n=0; i<_i && n<count; i++) {
 				ip = list.get(i);
 				
 				monitor = monitorTable.getJSONObject(ip);
@@ -88,6 +88,8 @@ public class TopTable implements Comparator<String> {
 				}
 				
 				resourceTop.put(ip,  this.top.get(ip).toJSONObject());
+				
+				n++;
 			}
 			
 			top.put(resource.toString(), resourceTop);

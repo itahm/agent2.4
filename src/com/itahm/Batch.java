@@ -160,18 +160,32 @@ public class Batch {
 		System.out.println("Server load monitor up.");
 	}
 
-	private final void scheduleDiskCleaner(final long minDateMills, Date time) {
+	private final void scheduleDiskCleaner(final int period) {
+		Calendar c = Calendar.getInstance();
+		
+		c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
+		c.set(Calendar.HOUR_OF_DAY, 0);
+		c.set(Calendar.MINUTE, 0);
+		c.set(Calendar.SECOND, 0);
+		c.set(Calendar.MILLISECOND, 0);
+		
+		/*
+		c.set(Calendar.MINUTE, c.get(Calendar.MINUTE) +1);
+		c.set(Calendar.SECOND, 0);
+		c.set(Calendar.MILLISECOND, 0);
+		*/
+		
 		this.timer.schedule(this.schedule = new TimerTask() {
 
 			@Override
 			public void run() {
-				clean(minDateMills);
+				clean(period);
 			}
 			
-		}, time);
+		}, c.getTime());
 	}
 	
-	synchronized public void clean(final long minDateMills) {
+	synchronized public void clean(final int period) {
 		if (this.schedule != null) {
 			this.schedule.cancel();
 		}
@@ -180,8 +194,21 @@ public class Batch {
 			this.cleaner.cancel();
 		}
 		
+		if (period <= 0) {
+			return;
+		}
+		
+		Calendar c = Calendar.getInstance();
+		
+		c.set(Calendar.HOUR_OF_DAY, 0);
+		c.set(Calendar.MINUTE, 0);
+		c.set(Calendar.SECOND, 0);
+		c.set(Calendar.MILLISECOND, 0);
+		
+		c.add(Calendar.DATE, -1 *period);
+		
 		try {
-			this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), minDateMills, 3) {
+			this.cleaner = new DataCleaner(new File(this.dataRoot, "node"), c.getTimeInMillis(), 3) {
 				private final long start = System.currentTimeMillis();
 				
 				@Override
@@ -196,20 +223,8 @@ public class Batch {
 							.put("message", String.format("파일 정리 취소.")), false);
 					}
 					else {
-						Calendar c = Calendar.getInstance();
 						
-						c.set(Calendar.DATE, c.get(Calendar.DATE) +1);
-						c.set(Calendar.HOUR_OF_DAY, 0);
-						c.set(Calendar.MINUTE, 0);
-						c.set(Calendar.SECOND, 0);
-						c.set(Calendar.MILLISECOND, 0);
-						
-						/*
-						c.set(Calendar.MINUTE, c.get(Calendar.MINUTE) +1);
-						c.set(Calendar.SECOND, 0);
-						c.set(Calendar.MILLISECOND, 0);
-						*/
-						scheduleDiskCleaner(minDateMills, c.getTime());
+						scheduleDiskCleaner(period);
 						
 						Agent.log(new JSONObject()
 							.put("origin", "system")
