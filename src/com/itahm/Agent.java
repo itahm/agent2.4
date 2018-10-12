@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Enumeration;
@@ -12,9 +13,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-import com.itahm.Log;
 import com.itahm.SNMPAgent;
 import com.itahm.ICMPAgent;
+import com.itahm.json.JSONException;
 import com.itahm.json.JSONObject;
 import com.itahm.http.HTTPListener;
 import com.itahm.command.Command;
@@ -30,11 +31,10 @@ import com.itahm.table.Table;
 public class Agent {
 
 	public final static String VERSION = "2.0.3.4";
-	private final static String DATA = "data";
 	
 	private static Map<Table.Name, Table> tables = new HashMap<>();
 	private static Set<Integer> validIFType = null;
-	private static Log log;
+	private static LogFile dailyFile;
 	private static SNMPAgent snmp;
 	private static ICMPAgent icmp;
 	private static JSONObject config;
@@ -47,7 +47,11 @@ public class Agent {
 	
 	public static void initialize(File path) throws IOException {
 		root = path;
-		dataRoot = new File(root, DATA);
+		dataRoot = new File(root, "data");
+		
+		dataRoot.mkdir();
+		
+		dailyFile = new LogFile(new File(dataRoot, "log"));
 		
 		tables.put(Table.Name.CONFIG, new Config(dataRoot));
 		tables.put(Table.Name.ACCOUNT, new Account(dataRoot));
@@ -65,7 +69,6 @@ public class Agent {
 			validIFType = parseIFType(config.getString("iftype"));
 		}
 		
-		log = new Log(dataRoot);
 		batch = new Batch(dataRoot);
 		
 		batch.scheduleDiskMonitor();
@@ -77,6 +80,8 @@ public class Agent {
 		}
 		
 		System.out.format("ITAhM Agent version %s ready.\n", VERSION);
+		
+		
 	}
 	
 	public static void setLimit(int i) {
@@ -244,14 +249,18 @@ public class Agent {
 	}
 	
 	public static void log(JSONObject event, boolean broadcast) {		
-		log.write(event);
+		try {
+			dailyFile.write(event.put("date", Calendar.getInstance().getTimeInMillis()));
+		} catch (IOException ioe) {
+			ioe.printStackTrace();
+		}
 		
 		if (listener != null) {
 			listener.sendEvent(event, broadcast);
 		}
 	}
 	
-	public static void restore(JSONObject backup) throws Exception {
+	public static void restore(JSONObject backup) throws JSONException, IOException {
 		Table.Name name;
 		Table table;
 		
@@ -371,10 +380,6 @@ public class Agent {
 		return snmp.getTop(count);
 	}
 	
-	public static String report(long start, long end) throws IOException {
-		return log.read(start, end);
-	}
-	
 	public static void resetResponse(String ip) {
 		snmp.resetResponse(ip);
 	}
@@ -383,10 +388,20 @@ public class Agent {
 		return snmp.getFailureRate(ip);
 	}
 	
-	public static String getLog(long date) throws IOException {
-		return log.read(date);
+	public static JSONObject getEvent(long index) {
+		
+		return dailyFile.getEvent(index);
 	}
 	
+	public static String getLog(long date) throws IOException {
+		byte [] bytes = dailyFile.read(date);
+		
+		return bytes == null? new JSONObject().toString(): new String(bytes, StandardCharsets.UTF_8.name());
+	}
+	
+	/**
+	 * snmp, icmp 서비스만 멈춤
+	 */
 	public static void stop() {
 		if (snmp != null) {
 			snmp.close();
@@ -397,22 +412,46 @@ public class Agent {
 		}
 	}
 	
-	public static boolean request(JSONObject request, Response response) throws IOException {		
+	public static boolean request(JSONObject request, Response response) {		
 		Command command = Command.valueOf(request.getString("command"));
 		
 		if (command == null) {
 			return false;
 		}
 		
-		command.execute(request, response);
+		try {
+			command.execute(request, response);
+		} catch (JSONException jsone) {
+			response.write(new JSONObject().
+				put("error", jsone.getMessage()).toString());
+			
+			response.setStatus(Response.Status.BADREQUEST);
+			
+		} catch (IOException ioe) {
+			response.write(new JSONObject().
+				put("error", ioe.getMessage()).toString());
+			
+			response.setStatus(Response.Status.SERVERERROR);
+		}
 		
 		return true;
 	}
 	
+	/**
+	 * agent 종료
+	 */
 	public static void close() {
 		stop();
 		
 		batch.stop();
+		
+		for (Table.Name name : tables.keySet()) {
+			try {
+				tables.get(name).close();
+			} catch (IOException ioe) {
+				ioe.printStackTrace();
+			}
+		}
 		
 		System.out.println("ITAhM agent down.");
 	}

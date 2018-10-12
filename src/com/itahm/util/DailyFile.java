@@ -13,6 +13,10 @@ public class DailyFile {
 	private int day = 0;
 	
 	public DailyFile(File root) throws IOException {
+		if (!root.isDirectory()) {
+			root.mkdir();
+		}
+		
 		this.file = new File(root, Long.toString(Util.trimDate(Calendar.getInstance()).getTimeInMillis()));
 		
 		this.root = root;

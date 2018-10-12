@@ -15,7 +15,7 @@ public class LogFile extends DailyFile {
 
 	private final File backup;
 	private JSONObject log;
-	private int index = 0;
+	private long index = 0;
 	
 	public LogFile(File root) throws IOException {
 		super(root);
@@ -29,20 +29,27 @@ public class LogFile extends DailyFile {
 		}
 		
 		for (Object key : log.keySet()) {
-			index = Math.max(index, Integer.parseInt((String)key));
+			index = Math.max(index, Long.parseLong((String)key));
 		}
 	}
 	
-	public JSONObject getLog(String index) {
-		if (this.log.has(index)) {
-			return this.log.getJSONObject(index);
+	public JSONObject getEvent(long index) {
+		String i = Long.toString(index);
+		
+		if (this.log.has(i)) {
+			return this.log.getJSONObject(i);
 		}
 		
 		return null;
 	}
 	
+	/**
+	 * 이 과정에서 이벤트에 인덱스가 생성되므로 인덱스를 사용해야 한다면 반듯이 선행되어야 한다.
+	 * @param log
+	 * @throws IOException
+	 */
 	public synchronized void write(JSONObject log) throws IOException {
-		String index = Long.toString(this.index++ & 0xffffffffL);
+		String index = Long.toString(this.index++);
 		
 		log.put("index", index);
 		

@@ -11,18 +11,13 @@ public class Query extends Command {
 	
 	@Override
 	public void execute(JSONObject request, Response response) throws IOException {
-		try {
-			JSONObject body = Agent.getNodeData(request);
-			
-			if (body == null) {
-				throw new JSONException("Node or Data not found.");
-			}
-			
-			response.write(body.toString());
+		JSONObject body = Agent.getNodeData(request);
+		
+		if (body == null) {
+			throw new JSONException("Node or Data not found.");
 		}
-		catch (JSONException jsone) {
-			response.setStatus(Response.Status.BADREQUEST);
-		}
+		
+		response.write(body.toString());
 	}
 
 }

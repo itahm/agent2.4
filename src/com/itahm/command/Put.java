@@ -13,18 +13,13 @@ public class Put extends Command {
 	
 	@Override
 	public void execute(JSONObject request, Response response) throws IOException {
-		try {
-			Table table = Agent.getTable(request.getString("database"));
-			
-			if (table == null) {
-				throw new JSONException("Database not found.");
-			}
-			else {
-				response.write(table.put(request.getString("key"), request.isNull("value")? null: request.getJSONObject("value")).toString());
-			}
+		Table table = Agent.getTable(request.getString("database"));
+		
+		if (table == null) {
+			throw new JSONException("Database not found.");
 		}
-		catch (JSONException jsone) {
-			response.setStatus(Response.Status.BADREQUEST);
+		else {
+			response.write(table.put(request.getString("key"), request.isNull("value")? null: request.getJSONObject("value")).toString());
 		}
 	}
 	

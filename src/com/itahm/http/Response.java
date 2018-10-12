@@ -73,8 +73,12 @@ public class Response {
 		this.body = body;
 	}
 	
-	public void write(String body) throws UnsupportedEncodingException {
-		this.body = body.getBytes(StandardCharsets.UTF_8.name());
+	public void write(String body) {
+		try {
+			this.body = body.getBytes(StandardCharsets.UTF_8.name());
+		} catch (UnsupportedEncodingException e) {
+			this.body = new byte [0];
+		}
 	}
 	
 	public void write(File url) throws IOException {

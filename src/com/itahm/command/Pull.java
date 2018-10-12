@@ -14,24 +14,19 @@ public class Pull extends Command {
 	
 	@Override
 	public void execute(JSONObject request, Response response) throws IOException {
-		try {
-			Table table = Agent.getTable(request.getString("database"));
-			
-			if (table == null) {
-				throw new JSONException("Database not found.");
-			}
-			else {
-				JSONObject body = table.getJSONObject();
-				
-				if (table instanceof Config) {
-					Agent.getInformation(body);
-				}
-				
-				response.write(body.toString());
-			}
+		Table table = Agent.getTable(request.getString("database"));
+		
+		if (table == null) {
+			throw new JSONException("Database not found.");
 		}
-		catch (JSONException jsone) {
-			response.setStatus(Response.Status.BADREQUEST);
+		else {
+			JSONObject body = table.getJSONObject();
+			
+			if (table instanceof Config) {
+				Agent.getInformation(body);
+			}
+			
+			response.write(body.toString());
 		}
 	}
 	

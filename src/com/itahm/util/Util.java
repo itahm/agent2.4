@@ -87,6 +87,13 @@ public class Util {
 		}
 	}
 	
+	/**
+	 * 
+	 * @param file destination
+	 * @param json source
+	 * @return source itself
+	 * @throws IOException
+	 */
 	public static JSONObject putJSONtoFile(File file, JSONObject json) throws IOException {
 		try (FileOutputStream fos = new FileOutputStream(file)) {
 			fos.write(json.toString().getBytes(StandardCharsets.UTF_8));

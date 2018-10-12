@@ -30,7 +30,7 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 		System.out.format("ITAhM HTTP Server started with TCP %d.\n", tcp);
 		
 		byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
-		long expire = 1539702000000L; // 1546268400000L;
+		long expire = 0; // 1546268400000L;
 		int limit = 0;
 		
 		if (!Agent.isValidLicense(license)) {
@@ -152,15 +152,28 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 					response.setStatus(Response.Status.UNAUTHORIZED);
 				}
 				else {
-					synchronized(this) {
-						try {
-							wait();
-						} catch (InterruptedException ie) {
-						}
+					JSONObject event = null;
+					
+					if (data.has("index")) {
+						event = Agent.getEvent(data.getLong("index"));
 						
-						response.write(event);
+					}
+					
+					if (event == null) {
+						synchronized(this) {
+							try {
+								wait();
+							} catch (InterruptedException ie) {
+							}
+							
+							response.write(this.event);
+						}
+					}
+					else {
+						response.write(event.toString().getBytes(StandardCharsets.UTF_8.name()));
 					}
 				}
+				
 				break;
 				
 			default:
@@ -174,8 +187,9 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 					
 		} catch (JSONException | UnsupportedEncodingException e) {
 			response.setStatus(Response.Status.BADREQUEST);
-		} catch (IOException ioe) {
-			response.setStatus(Response.Status.SERVERERROR);
+			
+			response.write(new JSONObject().
+				put("error", e.getMessage()).toString());
 		}
 	}
 	
@@ -215,7 +229,6 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 					itahm.close();
 				}
 			});
-		
 	}
 
 	@Override
@@ -223,11 +236,9 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 		synchronized(this) {
 			try {
 				this.event = event.toString().getBytes(StandardCharsets.UTF_8.name());
-			} catch (UnsupportedEncodingException e) {
-				this.event = null;
-			};
-			
-			notifyAll();
+				
+				notifyAll();
+			} catch (UnsupportedEncodingException e) {}			
 		}
 		
 		if (broadcast) {

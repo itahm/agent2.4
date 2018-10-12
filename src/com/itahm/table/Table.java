@@ -1,12 +1,14 @@
 package com.itahm.table;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 
+import com.itahm.Agent;
 import com.itahm.json.JSONObject;
 import com.itahm.util.Util;
 
-public class Table {
+public class Table implements Closeable{
 	public enum Name {
 		ACCOUNT("account"),
 		CRITICAL("critical"),
@@ -40,22 +42,42 @@ public class Table {
 	}
 	
 	protected JSONObject table;
-	private File file;
+	private final File tableFile;
+	private final File backupFile;
 	
-	public Table(File dataRoot, Name name) throws IOException {	
-		file = new File(dataRoot, name.toString());
+	/**
+	 * 
+	 * @param dataRoot
+	 * @param name 
+	 * @throws IOException
+	 */
+	public Table(File dataRoot, Name name) throws IOException {
+		tableFile = new File(dataRoot, name.toString());
+		backupFile = new File(dataRoot, name.toString() +".backup");
 		
-		if (file.isFile()) {
-			table = Util.getJSONFromFile(file);
+		if (tableFile.isFile()) {
+			table = Util.getJSONFromFile(tableFile);
 			
 			if (table == null) {
-				throw new IOException("Table ("+ name +") loading failure");
+				if (backupFile.isFile()) {
+					tableFile.delete();
+					
+					backupFile.renameTo(tableFile);
+					
+					table = Util.getJSONFromFile(tableFile);
+					
+					Agent.log(new JSONObject().
+						put("origin", "system").
+						put("message", String.format("Table.%s 파일이 백업으로부터 복구되었습니다.", name.toString())), false);
+				}
+				
+				if (table == null) {
+					throw new IOException("Table."+ name.toString() +" loading failure");						
+				}
 			}
 		}
 		else {
-			table = new JSONObject();
-			
-			Util.putJSONtoFile(file, table);
+			table = Util.putJSONtoFile(tableFile, new JSONObject());
 		}
 	}
 	
@@ -86,8 +108,10 @@ public class Table {
 		return save();
 	}
 	
-	public JSONObject save() throws IOException {
-		return Util.putJSONtoFile(this.file, this.table);
+	public synchronized JSONObject save() throws IOException {
+		this.tableFile.renameTo(this.backupFile);
+		
+		return Util.putJSONtoFile(this.tableFile, this.table);
 	}
 
 	public JSONObject save(JSONObject table) throws IOException{
@@ -95,5 +119,8 @@ public class Table {
 		
 		return save();
 	}
+
+	@Override
+	public synchronized void close() throws IOException {}
 	
 }

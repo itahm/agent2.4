@@ -13,18 +13,13 @@ public class Push extends Command {
 	
 	@Override
 	public void execute(JSONObject request, Response response) throws IOException {
-		try {
-			Table table = Agent.getTable(request.getString("database"));
-			
-			if (table == null) {
-				throw new JSONException("Database not found.");
-			}
-			else {
-				table.save(request.getJSONObject("data"));
-			}
+		Table table = Agent.getTable(request.getString("database"));
+		
+		if (table == null) {
+			throw new JSONException("Database not found.");
 		}
-		catch (JSONException jsone) {
-			response.setStatus(Response.Status.BADREQUEST);
+		else {
+			table.save(request.getJSONObject("data"));
 		}
 	}
 	
