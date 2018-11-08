@@ -473,7 +473,7 @@ public class SNMPNode extends Node {
 		catch (IllegalArgumentException iae) {
 		}
 		catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		return null;
@@ -526,7 +526,7 @@ public class SNMPNode extends Node {
 				
 				parseInterface();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		

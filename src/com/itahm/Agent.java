@@ -216,8 +216,8 @@ public class Agent {
 		
 		try {
 			getTable(Table.Name.CONFIG).save();
-		} catch (IOException e) {
-			e.printStackTrace();
+		} catch (IOException ioe) {
+			System.err.print(ioe);
 		}
 	}
 	
@@ -252,7 +252,7 @@ public class Agent {
 		try {
 			dailyFile.write(event.put("date", Calendar.getInstance().getTimeInMillis()));
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		if (listener != null) {
@@ -449,7 +449,7 @@ public class Agent {
 			try {
 				tables.get(name).close();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		

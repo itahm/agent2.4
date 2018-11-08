@@ -3,6 +3,8 @@ package com.itahm;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
@@ -29,8 +31,8 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 		
 		System.out.format("ITAhM HTTP Server started with TCP %d.\n", tcp);
 		
-		byte [] license = null; // new byte [] {(byte)0x6c, (byte)0x3b, (byte)0xe5, (byte)0x51, (byte)0x2D, (byte)0x80};
-		long expire = 0; // 1546268400000L;
+		byte [] license = null;
+		long expire = 0;
 		int limit = 0;
 		
 		if (!Agent.isValidLicense(license)) {
@@ -54,7 +56,7 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 				public void run() {
 					Agent.close();
 					
-					new Exception("Check your License[3].").printStackTrace();
+					System.err.print(new Exception("Check your License[3]."));
 				}
 			}, new Date(expire));
 		}
@@ -221,6 +223,23 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 			root = new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile();
 		}
 		
+		System.setErr(
+			new PrintStream(
+				new OutputStream() {
+
+					@Override
+					public void write(int b) throws IOException {
+					}	
+				}
+			) {
+		
+				@Override
+				public void print(Object e) {
+					((Exception)e).printStackTrace(System.out);
+				}
+			}
+		);
+		
 		ITAhM itahm = new ITAhM(root, tcp);
 			
 		Runtime.getRuntime().addShutdownHook(
@@ -228,7 +247,8 @@ public class ITAhM extends HTTPServer implements Closeable, HTTPListener {
 				public void run() {
 					itahm.close();
 				}
-			});
+			}
+		);
 	}
 
 	@Override

@@ -44,7 +44,7 @@ abstract public class Critical {
 						map.put((String)index, new Value(value));
 					}
 					catch(JSONException jsone) {
-						jsone.printStackTrace();
+						System.err.print(jsone);
 					}
 				}
 			}

@@ -35,7 +35,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 					addNode((String)ip);
 				}
 			} catch (JSONException jsone) {
-				jsone.printStackTrace();
+				System.err.print(jsone);
 			}
 		}
 	}
@@ -50,7 +50,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			
 			node.ping(0);
 		} catch (UnknownHostException uhe) {
-			uhe.printStackTrace();
+			System.err.print(uhe);
 		}		
 	}
 	
@@ -68,7 +68,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 		try {
 			node.close();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		return true;
@@ -102,7 +102,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 								break;
 							}
 						} catch (IOException ioe) {
-							ioe.printStackTrace();
+							System.err.print(ioe);
 							
 							break;
 						}
@@ -126,7 +126,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 					try {
 						monitorTable.save();
 					} catch (IOException ioe) {
-						ioe.printStackTrace();
+						System.err.print(ioe);
 					}
 					
 					addNode(ip);
@@ -169,7 +169,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			try {
 				this.monitorTable.save();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 			
 			Agent.log(new JSONObject()
@@ -196,7 +196,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 			try {
 				this.monitorTable.save();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 			
 			Agent.log(new JSONObject()
@@ -220,7 +220,7 @@ public class ICMPAgent implements ICMPListener, Closeable {
 				try {
 					node.close();
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					System.err.print(ioe);
 				}
 			}
 		}

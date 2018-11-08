@@ -94,7 +94,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				}
 			}
 			catch (JSONException jsone) {
-				jsone.printStackTrace();
+				System.err.print(jsone);
 			}
 		}
 	}
@@ -137,7 +137,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			try {
 				addNode(ip, profileName);
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 			
 			return true;
@@ -195,7 +195,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			node.request();
 		}
 		catch (JSONException jsone) {
-			jsone.printStackTrace();
+			System.err.print(jsone);
 		}
 	}
 	
@@ -259,7 +259,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			}
 		}
 		catch (JSONException jsone) {
-			jsone.printStackTrace();
+			System.err.print(jsone);
 			
 			return false;
 		}
@@ -556,7 +556,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 					break;
 				}
 			} catch (UnknownHostException | JSONException e) {
-				e.printStackTrace();
+				System.err.print(e);
 			}
 		}
 		
@@ -586,7 +586,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			try {
 				data = Util.getJSONFromFile(f);
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		
@@ -628,7 +628,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 			try {
 				Util.putJSONtoFile(new File(new File(this.nodeRoot, ip), "node"), node.getData());
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 			
 			sendNextRequest(node);
@@ -663,7 +663,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				try {
 					this.monitorTable.save();
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					System.err.print(ioe);
 				}
 				
 				Agent.log(new JSONObject()
@@ -681,7 +681,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 				try {
 					this.monitorTable.save();
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					System.err.print(ioe);
 				}
 				
 				Agent.log(new JSONObject()
@@ -746,14 +746,14 @@ public class SNMPAgent extends Snmp implements Closeable {
 			try {
 				this.monitorTable.save();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		
 		try {
 			this.criticalTable.save();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		Agent.log(new JSONObject()
@@ -798,7 +798,7 @@ public class SNMPAgent extends Snmp implements Closeable {
 		try {
 			node.request();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 			
 			sendNextRequest(node);
 		}
@@ -843,14 +843,14 @@ public class SNMPAgent extends Snmp implements Closeable {
 		try {
 			super.close();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		for (SNMPNode node: this.nodeList.values()) {
 			try {
 				node.close();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		

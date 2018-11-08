@@ -56,7 +56,12 @@ public class Session {
 			}
 		};
 		
-		timer.schedule(this.task, timeout);
+		try {
+			timer.schedule(this.task, timeout);
+		}
+		catch (IllegalStateException ise) {
+			return null;
+		}
 		
 		return this;
 	}

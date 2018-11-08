@@ -172,7 +172,7 @@ public abstract class Node implements Runnable, Closeable {
 			} catch (InterruptedException ie) {
 				break;
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 				
 				break;
 			}
@@ -518,7 +518,7 @@ public abstract class Node implements Runnable, Closeable {
 					nextRequests.add(responseVB);
 				}
 			} catch(JSONException jsone) { 
-				jsone.printStackTrace();
+				System.err.print(jsone);
 			}
 		}
 		

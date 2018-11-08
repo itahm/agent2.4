@@ -142,7 +142,7 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 			try {
 				count = this.selector.select();
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 				
 				continue;
 			}
@@ -161,7 +161,7 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 						try {
 							onConnect();
 						} catch (IOException ioe) {
-							ioe.printStackTrace();
+							System.err.print(ioe);
 						}
 					}
 					else if (key.isReadable()) {
@@ -169,12 +169,12 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 							onRead(key);
 						}
 						catch (IOException ioe) {
-							ioe.printStackTrace();
+							System.err.print(ioe);
 							
 							try {
 								closeRequest((Connection)key.attachment());
 							} catch (IOException ioe2) {
-								ioe2.printStackTrace();
+								System.err.print(ioe2);
 							}
 						}
 					}
@@ -185,13 +185,13 @@ public abstract class HTTPServer extends Timer implements Runnable, Closeable {
 		try {
 			this.selector.close();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		try {
 			this.listener.close();
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 	}
 	

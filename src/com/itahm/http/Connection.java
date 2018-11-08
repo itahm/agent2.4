@@ -82,13 +82,13 @@ public class Connection implements Closeable {
 				try {
 					channel.socket().setSoLinger(true, 0);
 				} catch (SocketException se) {
-					se.printStackTrace();
+					System.err.print(se);
 				}
 				
 				try {
 					listener.closeRequest(request);
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					System.err.print(ioe);
 				}
 			}
 		};
@@ -211,7 +211,7 @@ public class Connection implements Closeable {
 		try {
 			request = new Request(this.startLine, this.header, this.body.toByteArray());
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 			
 			return null;
 		}

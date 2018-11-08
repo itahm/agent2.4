@@ -52,7 +52,7 @@ public class TestNode extends TmpNode {
 					break;
 				}
 			} catch (IOException ioe) {
-				ioe.printStackTrace();
+				System.err.print(ioe);
 			}
 		}
 		
@@ -67,7 +67,7 @@ public class TestNode extends TmpNode {
 				.put("shutdown", false)
 				.put("critical", false));
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			System.err.print(ioe);
 		}
 		
 		Agent.log(new JSONObject()

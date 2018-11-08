@@ -94,6 +94,7 @@ public class Device extends Table {
 		}
 		else if (device.has("ip")){
 			String ip = device.getString("ip");
+			
 			// monitor에서 critical을 함께 삭제함
 			Agent.getTable(Name.MONITOR).put(ip, null);
 			
@@ -141,7 +142,6 @@ public class Device extends Table {
 		}
 		else if (NULL.equals(id)){ // 추가
 			id = add(device);
-			
 		}
 		else { // 수정
 			modify(id, device);

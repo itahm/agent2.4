@@ -16,7 +16,8 @@ public class Monitor extends Table {
 		// 모니터를 icmp 에서 snmp로, snmp 에서 icmp로 변경되는 상황, 또는 모니터를 삭제하는 상황
 		// 어떤상황이든 기존 모니터가 있다면 일단 지워주자.
 		if (super.table.has(ip)) {
-			switch(monitor.getString("protocol")) {
+			// 삭제인 경우 monitor가 null 이므로
+			switch((monitor == null? super.table.getJSONObject(ip): monitor).getString("protocol")) {
 			case "snmp":
 				if (Agent.removeSNMPNode(ip)) {
 					Agent.getTable(Name.CRITICAL).put(ip, null);
